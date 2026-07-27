@@ -84,9 +84,9 @@ def pagina_principal():
 def adicionar_teste():
    # user = Utilizador(nome='João', email='joao@example.com')
 
-    #db.session.add(user)
+   # db.session.add(user)
 
-    #db.session.commit()
+   # db.session.commit()
 
     return 'User adicionado com sucesso!'
 
@@ -113,10 +113,23 @@ def listar_users():
 def criar_projeto():
     dados = request.get_json()
 
-#cria o proj na memoria
-    novo_projeto = Projeto(
-        nome=dados['nome'],
-    )
+    #verifica se enviaram os dados e se o nome existe no JSON
+    if not dados or 'nome' not in dados:
+        return jsonify({"erro": "Falta o campo 'nome' no pedido JSON."}), 400
+
+    #limpa espaços e verifica senao esta vazio
+    nome_limpo = dados['nome'].strip()
+    if not nome_limpo:
+        return jsonify({"erro": "O nome do projeto não pode estar vazio."}), 400
+
+    #cria o proj na memoria
+    novo_projeto = Projeto(nome=nome_limpo,)
+    
+#grava na bd
+    db.session.add(novo_projeto)
+    db.session.commit()
+
+    return jsonify(novo_projeto.to_dict()), 201
 
 
 #rota para listar os projs
@@ -128,11 +141,110 @@ def listar_projetos():
     return jsonify(resultado), 200
 
 
-#grava na bd
-    db.session.add(novo_projeto)
+#rota para apagar um proj
+@app.route('/projetos/<int:projeto_id>', methods=['DELETE'])
+def apagar_projeto(projeto_id):
+    #procura proj pelo ID senao existe da erro
+    projeto = Projeto.query.get_or_404(projeto_id)
+
+    #vai buscar todos os caminhos associados ao proj
+    caminhos_associados = Caminho.query.filter_by(projeto_id=projeto.id).all()
+
+    #para cada caminho, aoaga o historico primeiro
+    for caminho in caminhos_associados:
+        Historico.query.filter_by(caminho_id=caminho.id).delete()
+
+    #apaga os proprios caminhos associados ao proj
+    Caminho.query.filter_by(projeto_id=projeto.id).delete()
+
+    #apaga o proj original
+    db.session.delete(projeto)
+
+    #grava na bd
     db.session.commit()
 
-    return jsonify(novo_projeto.to_dict()), 201
+    #devolve resposta de sucesso
+    return jsonify({
+        "mensagem": f"O projeto '{projeto.nome}' e todos os seus registos foram apagados com sucesso!"
+    }), 200
+
+
+#rota para editar um proj
+@app.route('/projetos/<int:id>', methods=['PUT'])
+def editar_projeto(id):
+    #procura o proj na bd
+    projeto = Projeto.query.get(id)
+    if not projeto:
+        return jsonify({"erro": "Projeto não encontrado."}), 404
+
+    dados = request.get_json()
+
+    #validaçao
+    if not dados or 'nome' not in dados:
+        return jsonify({"erro": "Falta o campo 'nome' no pedido JSON."}), 400
+
+    nome_limpo = dados['nome'].strip()
+    if not nome_limpo:
+        return jsonify({"erro": "O nome do projeto não pode estar vazio."}), 400
+
+    #atualiza o nome e grava na bd
+    projeto.nome = nome_limpo
+    db.session.commit()
+
+    return jsonify(projeto.to_dict()), 200
+
+
+#rota para apagar um caminho individual
+@app.route('/caminhos/<int:caminho_id>', methods=['DELETE'])
+def apagar_caminho(caminho_id):
+    #procura o caminho pelo ID
+    caminho = Caminho.query.get_or_404(caminho_id)
+
+    #apaga o historico associado a pasta
+    Historico.query.filter_by(caminho_id=caminho.id).delete()
+
+    #apaga o caminho
+    db.session.delete(caminho)
+
+    #grava na bd
+    db.session.commit()
+
+    return jsonify({
+        "mensagem": f"O caminho '{caminho.localizacao}' e o seu histórico foram apagados com sucesso!"
+    }), 200
+
+
+#rota para editar um caminho individual
+@app.route('/caminhos/<int:id>', methods=['PUT'])
+def editar_caminho(id):
+    #prcura caminho pelo ID
+    caminho = Caminho.query.get(id)
+
+    #senao existe devolve erro
+    if not caminho:
+        return jsonify({"erro": "Caminho não encontrado."}), 404
+
+    dados = request.get_json()
+
+    novo_nome = dados.get('nome', '').strip()
+
+    #validar se o nome nao ficou vazio
+    if not novo_nome:
+        return jsonify({"erro": "O nome do caminho é obrigatório e não pode estar vazio!"}), 400
+
+    #atualiza a bd com o novo nome
+    caminho.nome = novo_nome
+    db.session.commit()
+
+    #devolve a confirmaçao
+    return jsonify({
+        "mensagem": "Caminho atualizado com sucesso!",
+        "caminho_editado":{
+            "id": caminho.id,
+            "nome": caminho.nome,
+        }
+    }), 200
+
 
 #rota para ver todos os projetos
 @app.route('/projetos', methods=['GET'])
@@ -238,6 +350,27 @@ def ver_historico_caminho(caminho_id):
     } for h in registos]
 
     return jsonify(resultado), 200
+
+
+#rota para stats
+@app.route('/estatisticas', methods=['GET'])
+def obter_estatisticas():
+    #conta quantos registos existem em cada tabela
+    total_projetos = Projeto.query.count()
+    total_caminhos = Caminho.query.count()
+    total_verificacoes = Historico.query.count()
+
+    #prep do relatorio final em JSON
+    relatorio = {
+        "dashboard": {
+            "projetos_ativos": total_projetos,
+            "caminhos_monitorizados": total_caminhos,
+            "verificacoes_realizadas": total_verificacoes
+        }
+    }
+
+    return jsonify(relatorio), 200
+
 
 #ligar 
 if __name__ == '__main__':
