@@ -1,9 +1,11 @@
 import os
 from flask import Flask , jsonify, request
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 
 #criar API
 app = Flask(__name__)
+CORS(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/teste_monitor'
 
@@ -45,8 +47,9 @@ class Caminho(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'nome': self.nome
-    }
+            'localizacao': self.localizacao,
+            'projeto_id': self.projeto_id
+        }
 
 
 class Historico(db.Model):
@@ -65,8 +68,10 @@ class Historico(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'data_hora': self.data_hora,
-            'caminho_id': self.caminho_id
+            'data_verificacao': str(self.data_verificacao),
+            'caminho_id': self.caminho_id,
+            'estado': self.estado,
+            'detalhes': self.detalhes
         }
 
 #construir
@@ -226,33 +231,21 @@ def editar_caminho(id):
 
     dados = request.get_json()
 
-    novo_nome = dados.get('nome', '').strip()
+    nova_localizacao = dados.get('localizacao', '').strip()
 
-    #validar se o nome nao ficou vazio
-    if not novo_nome:
-        return jsonify({"erro": "O nome do caminho é obrigatório e não pode estar vazio!"}), 400
+    #validar se a localizacao nao ficou vazio
+    if not nova_localizacao:
+        return jsonify({"erro": "A localização do caminho é obrigatória e não pode estar vazio!"}), 400
 
-    #atualiza a bd com o novo nome
-    caminho.nome = novo_nome
+    #atualiza a bd com a nova localizacao
+    caminho.localizacao = nova_localizacao
     db.session.commit()
 
     #devolve a confirmaçao
     return jsonify({
         "mensagem": "Caminho atualizado com sucesso!",
-        "caminho_editado":{
-            "id": caminho.id,
-            "nome": caminho.nome,
-        }
+        "caminho_editado": caminho.to_dict()     
     }), 200
-
-
-#rota para ver todos os projetos
-@app.route('/projetos', methods=['GET'])
-def lver_projetos():
-    projetos = Projeto.query.all()
-
-
-    return jsonify([projeto.to_dict() for projeto in projetos]), 200
 
 
 #rota para associar um novo caminho a um projeto
