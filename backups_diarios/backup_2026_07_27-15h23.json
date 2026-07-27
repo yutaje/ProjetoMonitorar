@@ -1,0 +1,29 @@
+{
+    "data_backup": "2026-07-27 15:23:14",
+    "caminhos": [
+        {
+            "id": 1,
+            "localizacao": "C:\\Users\\PROCESSAMENTO1\\Desktop\\ProjetosTestes",
+            "projeto_id": 1
+        },
+        {
+            "id": 3,
+            "localizacao": "C:/Users/PROCESSAMENTO01/Desktop",
+            "projeto_id": 1
+        }
+    ],
+    "projetos": [
+        {
+            "id": 4,
+            "nome": "Meu Projeto de Teste"
+        },
+        {
+            "id": 1,
+            "nome": "Projeto Editado Com Sucesso"
+        },
+        {
+            "id": 3,
+            "nome": "Projeto Super Limpo"
+        }
+    ]
+}

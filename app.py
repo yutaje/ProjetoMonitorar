@@ -1,11 +1,33 @@
+from fileinput import filename
 import os
 from flask import Flask , jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.utils import secure_filename
+from datetime import datetime
+import json
+from apscheduler.schedulers.background import BackgroundScheduler
+from flask_jwt_extended import JWTManager, create_access_token
+from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash
+from flask_jwt_extended import jwt_required, get_jwt_identity
+
+
+
+
+PASTA_BACKUPS = 'backups_diarios'
+os.makedirs(PASTA_BACKUPS, exist_ok=True)
+
 
 #criar API
 app = Flask(__name__)
 CORS(app)
+
+
+app.config["JWT_SECRET_KEY"] = "chave_ty_xi"
+
+jwt = JWTManager(app)
+
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/teste_monitor'
 
@@ -13,12 +35,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/tes
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
-
-#users
-class Utilizador(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False)
 
 
 class Projeto(db.Model):
@@ -74,6 +90,21 @@ class Historico(db.Model):
             'detalhes': self.detalhes
         }
 
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    #guardar a passe encriptada
+    password = db.Column(db.String(200), nullable=False)
+
+    def to_dict(self):
+        return{
+            "id": self.id,
+            "username": self.username
+        }
+
+
+
 #construir
 with app.app_context():
     db.create_all()
@@ -84,16 +115,6 @@ with app.app_context():
 def pagina_principal():
     return 'funcional'
 
-#rota para adicionar user teste
-@app.route('/adicionar_teste')
-def adicionar_teste():
-   # user = Utilizador(nome='João', email='joao@example.com')
-
-   # db.session.add(user)
-
-   # db.session.commit()
-
-    return 'User adicionado com sucesso!'
 
 #rota para listar todos os users
 @app.route('/users')
@@ -363,6 +384,196 @@ def obter_estatisticas():
     }
 
     return jsonify(relatorio), 200
+
+#rota para o indice
+@app.route('/api/backups', methods=['GET'])
+def listar_backups():
+    try:
+        #lista todos os ficheiros da pasta que sao JSON
+        ficheiros = [f for f in os.listdir(PASTA_BACKUPS) if f.endswith('.json')]
+
+        #ordena do mais antigo para o mais recente
+        ficheiros.sort(reverse=True)
+
+        #devolve a lista em JSON
+        return jsonify({
+            "sucesso": True, 
+            "backups": ficheiros
+        }), 200
+
+    except Exception as e:
+        #se algo correr mal devolve erro
+        return jsonify({
+            "sucesso": False, 
+            "erro": f"Erro ao listar backups: {str(e)}"
+        }), 500
+
+
+@app.route('/api/backups/<filename>', methods=['GET'])
+def ler_backup(filename):
+    try:
+        #limpa o nome do ficheiro para segurança
+        nome_seguro = secure_filename(filename)
+        caminho_ficheiro = os.path.join(PASTA_BACKUPS, nome_seguro)
+
+        #verifica se o ficheiro existe na pasta
+        if not os.path.exists(caminho_ficheiro):
+            return jsonify({
+                "sucesso": False, 
+                "erro": "Backup não encontrado."
+            }), 404
+
+        #abre o ficheiro le o que esta dentro e transforma de volta em JSON
+        with open(caminho_ficheiro, 'r', encoding='utf-8') as f:
+            dados_backup = json.load(f)
+
+        #devolve dados ao frontend
+        return jsonify({
+            "sucesso": True,
+            "dados": dados_backup
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "sucesso": False, 
+            "erro": f"Erro ao ler o ficheiro: {str(e)}"
+        }), 500
+
+
+#rota para gerar backup com os dados da bd
+@app.route('/api/backups/gerar', methods=['POST'])
+def criar_backup_manual():
+    try:
+        #vai a bd buscar tudo
+        caminhos = Caminho.query.all()
+        projetos = Projeto.query.all()
+
+        #prepara os dados
+        dados_para_guardar = {
+            "data_backup": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "caminhos": [c.to_dict() for c in caminhos],
+            "projetos": [p.to_dict() for p in projetos]
+        }
+
+        #gera nome do ficheiro com timestamp
+        # 3. Cria o nome só com ano_mes_dia_hora_minuto
+        data_str = datetime.now().strftime("%Y_%m_%d-%Hh%M")
+        nome_ficheiro = f"backup_{data_str}.json"
+        caminho_completo = os.path.join(PASTA_BACKUPS, nome_ficheiro)
+
+        #escreve dados no ficheiro JSON
+        with open(caminho_completo, 'w', encoding='utf-8') as f:
+            json.dump(dados_para_guardar, f, ensure_ascii=False, indent=4)
+
+        return jsonify({
+            "sucesso": True, 
+            "mensagem": f"Backup {nome_ficheiro} criado com sucesso!",
+            "ficheiro": nome_ficheiro
+        }), 201
+
+    except Exception as e:
+        return jsonify({
+            "sucesso": False, 
+            "erro": f"Erro ao gerar o backup: {str(e)}"
+        }), 500
+
+
+#func que o robo vai executar solo
+def gerar_backup_automatico():
+    #key para aceder a bd
+    with app.app_context():
+        caminhos = Caminho.query.all()
+        projetos = Projeto.query.all()
+
+        dados = {
+            "data_backup": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "caminhos": [c.to_dict() for c in caminhos],
+            "projetos": [p.to_dict() for p in projetos]
+        }
+
+        #gera nome do ficheiro com timestamp
+        data_str = datetime.now().strftime("%Y_%m_%d-%Hh%M")
+        nome_ficheiro = f"backup_auto_{data_str}.json" # Adicionei 'auto' para distinguir
+        caminho_completo = os.path.join(PASTA_BACKUPS, nome_ficheiro)
+
+        with open(caminho_completo, 'w', encoding='utf-8') as f:
+            json.dump(dados, f, ensure_ascii=False, indent=4)
+
+        return nome_ficheiro
+
+
+scheduler = BackgroundScheduler()
+
+# backup da manha
+scheduler.add_job(func=gerar_backup_automatico, trigger="cron", hour=9, minute=15)
+
+# backup da tarde
+scheduler.add_job(func=gerar_backup_automatico, trigger="cron", hour=17, minute=30)
+scheduler.start()
+
+
+#rota do registo
+@app.route('/api/register', methods=['POST'])
+def register():
+    dados = request.get_json()
+    username = dados.get('username')
+    password = dados.get('password')
+
+    if not username or not password:
+        return jsonify({"error": "Preenche o username e a password"}), 400
+
+    #verifica se o user ja existe
+    utilizador_existente = User.query.filter_by(username=username).first()
+    if utilizador_existente:
+        utilizador_existente = User.query.filter_by(username=username). first()
+        return jsonify({"error": "Esse username já existe!"}), 400
+
+    #encripta a password antes de guardar
+    password_criptografada = generate_password_hash(password)
+
+    novo_utilizador = User(username=username, password=password_criptografada)
+
+    db.session.add(novo_utilizador)
+    db.session.commit()
+
+    return jsonify({"message": "Utilizador registado com sucesso!"}), 201
+     
+
+#rota login
+@app.route('/api/login', methods=['POST'])
+def login():
+    dados = request.get_json()
+    username = dados.get('username')
+    password = dados.get('password')
+
+    if not username or not password:
+        return jsonify({"error": "Preenche o username e a password!"}), 400
+
+    #procurar o user na bd
+    utilizador = User.query.filter_by(username=username).first()
+
+    #verificar se o user existe e se a password esta certa
+    if not utilizador or not check_password_hash(utilizador.password, password):
+        return jsonify({"error": "Credênciais inválidas!"}), 401
+
+    #se estives tudo certo, cria JWT token associado ao user ou ID
+    access_token = create_access_token(identity=str(utilizador.id))
+
+    return jsonify({
+        "message": "login efetuado com sucesso!",
+        "access_token": access_token
+    }), 200
+
+
+@app.route('/api/protegida', methods=['GET'])
+@jwt_required()
+def rota_protegida():
+    # Descobre qual é o ID do utilizador que está a usar o token
+    utilizador_id = get_jwt_identity()
+    return jsonify({
+        "message": "Acesso autorizado com sucesso!",
+        "utilizador_id": utilizador_id
+    }), 200
 
 
 #ligar 
