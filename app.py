@@ -15,6 +15,8 @@ from functools import wraps
 
 
 
+
+
 PASTA_BACKUPS = 'backups_diarios'
 os.makedirs(PASTA_BACKUPS, exist_ok=True)
 
@@ -152,6 +154,156 @@ class User(db.Model):
             "role": self.role
         }
 
+
+def executar_scan_caminho(caminho_obj):
+    localizacao = caminho_obj.localizacao
+    projeto_id = caminho_obj.projeto_id
+    
+    total_ficheiros = 0
+    extensoes_dict = {}
+    estado_atual = "OK"
+    detalhes_msg = "A pasta existe e está acessível."
+    tipo_erro_alerta = None
+
+    try:
+        if not os.path.exists(localizacao):
+            raise FileNotFoundError("A pasta não foi encontrada ou o caminho é inválido.")
+        
+        #percorre a pasta principal e todas as subpastas
+        for root, dirs, files in os.walk(localizacao):
+            for file in files:
+                total_ficheiros += 1
+                _, ext = os.path.splitext(file)
+                ext = ext.lower()
+                if ext:
+                    extensoes_dict[ext] = extensoes_dict.get(ext, 0) + 1
+
+    except PermissionError:
+        estado_atual = "ERRO"
+        detalhes_msg = "Permissão negada para aceder a este diretório."
+        tipo_erro_alerta = "Permissão negada"
+    except FileNotFoundError:
+        estado_atual = "ERRO"
+        detalhes_msg = "Caminho não encontrado ou diretório inexistente."
+        tipo_erro_alerta = "Caminho não encontrado"
+    except OSError as e:
+        estado_atual = "ERRO"
+        detalhes_msg = f"Erro de rede ou de sistema de ficheiros: {str(e)}"
+        tipo_erro_alerta = "Rede inacessível / Erro de I/O"
+    except Exception as e:
+        estado_atual = "ERRO"
+        detalhes_msg = f"Erro desconhecido: {str(e)}"
+        tipo_erro_alerta = "Erro desconhecido"
+
+    # guarda no historico com os novos campos
+    novo_historico = Historico(
+        caminho_id=caminho_obj.id,
+        estado=estado_atual,
+        total_ficheiros=total_ficheiros,
+        extensoes_detalhe=json.dumps(extensoes_dict, ensure_ascii=False),
+        detalhes=detalhes_msg
+    )
+    db.session.add(novo_historico)
+
+    # se der erro regista na tabela de Alertas
+    if estado_atual == "ERRO":
+        novo_alerta = Alerta(
+            projeto_id=projeto_id,
+            caminho_id=caminho_obj.id,
+            tipo_erro=tipo_erro_alerta,
+            estado_alerta="Por resolver"
+        )
+        db.session.add(novo_alerta)
+
+    db.session.commit()
+    return estado_atual, total_ficheiros
+
+
+#motor de pesquisa
+@app.route('/api/projetos/pesquisa', methods=['GET'])
+@jwt_required()
+def pesquisa_projetos():
+    #parametros de pesquisa opcionais
+    termo = request.args.get('termo', '').strip()
+    modo = request.args.get('modo', 'historico').lower()
+
+    #filtra os projs pelo nome se o termo for fornecido
+    if termo:
+        projetos = Projeto.query.filter(Projeto.nome.ilike(f"%{termo}%")).all()
+    else:
+        projetos = Projeto.query.all()
+
+    resultado_final = []
+
+    for projeto in projetos:
+        caminhos = Caminho.query.filter_by(projeto_id=projeto.id).all()
+        caminhos_info = []
+        total_ficheiros_projeto = 0
+
+        for caminho in caminhos:
+            # vai buscar o ultimo historico na bd para este caminho
+            ultimo_hist = Historico.query.filter_by(caminho_id=caminho.id).order_by(Historico.data_verificacao.desc()).first()
+
+            if modo == 'temporeal':
+                # modo irt executa o scan na hora
+                estado, total = executar_scan_caminho(caminho)
+                
+               
+                if estado not in ["OK", "Acessível", "Ativo"]: 
+                    
+                    # procura pelos alertas com estado 'por resolver'
+                    alerta_existente = Alerta.query.filter_by(caminho_id=caminho.id, estado_alerta='Por resolver').first()
+                    
+                    if not alerta_existente:
+                        novo_alerta = Alerta(
+                            projeto_id=projeto.id,
+                            caminho_id=caminho.id,
+                            tipo_erro=f"Erro de acesso: {estado}",
+                            estado_alerta='Por resolver' # <-- ESTAVA AQUI O ERRO!
+                        )
+                        db.session.add(novo_alerta)
+                        db.session.commit()
+                
+
+                # atualiza a ref do ultimo historico depois do scan
+                ultimo_hist = Historico.query.filter_by(caminho_id=caminho.id).order_by(Historico.data_verificacao.desc()).first()
+            else:
+                # modo historico, usa o que ja estava na bd
+                estado = ultimo_hist.estado if ultimo_hist else "Sem registo"
+                total = ultimo_hist.total_ficheiros if ultimo_hist else 0
+
+            total_ficheiros_projeto += total
+            
+            #tratamento seguro das extensões JSON
+            extensoes_dict = {}
+            if ultimo_hist and ultimo_hist.extensoes_detalhe:
+                try:
+                    extensoes_dict = json.loads(ultimo_hist.extensoes_detalhe)
+                except:
+                    extensoes_dict = {}
+
+            caminhos_info.append({
+                "caminho_id": caminho.id,
+                "localizacao": caminho.localizacao,
+                "estado": estado,
+                "total_ficheiros": total,
+                "extensoes": extensoes_dict,
+                "data_ultima_verificacao": str(ultimo_hist.data_verificacao) if ultimo_hist else None
+            })
+            
+        #agrupa os caminhos ao projeto
+        resultado_final.append({
+            "projeto_id": projeto.id,
+            "nome_projeto": projeto.nome,
+            "caminhos": caminhos_info,
+            "contagem_total_projeto": total_ficheiros_projeto
+        })
+
+    
+    return jsonify({
+        "modo_utilizado": modo,
+        "resultados": resultado_final
+    }), 200
 
 
 #construir
@@ -356,36 +508,23 @@ def criar_caminho(projeto_id):
 def verificar_caminho(caminho_id):
     #vai buscar o caminho a bd, se nao existir devolve 404
     caminho_obj = Caminho.query.get_or_404(caminho_id)
+    
+    
+    estado, total = executar_scan_caminho(caminho_obj)
 
-    #verifica se a pasta existe
-    pasta_existe = os.path.exists(caminho_obj.localizacao)
+    # vai buscar o ultimo historico gravado para devolver os detalhes e extensoes
+    ultimo_historico = Historico.query.filter_by(caminho_id=caminho_obj.id).order_by(Historico.data_verificacao.desc()).first()
 
-    if pasta_existe:
-        estado_atual = 'OK'
-        detalhes_msg = 'A pasta existe e está acessível.'
-    else:
-        estado_atual = 'ERRO'
-        detalhes_msg = 'Alerta: A pasta não foi encontrada ou o caminho é inválido.'
-
-    #cria novo registo na tabela historico
-    novo_historico = Historico(
-        caminho_id=caminho_obj.id,
-        estado=estado_atual,
-        detalhes=detalhes_msg
-    )
-
-    db.session.add(novo_historico)
-    db.session.commit()
-
-    #devolve o resultado em JSON
     return jsonify({
-        "mensagem": "Verificação concluída",
+        "mensagem": "Varredura física concluída com sucesso.",
         "caminho_id": caminho_obj.id,
         "localizacao": caminho_obj.localizacao,
-        "estado": estado_atual,
-        "detalhes": detalhes_msg,
-        "data_verificacao": str(novo_historico.data_verificacao)
-    }), 201
+        "estado": estado,
+        "total_ficheiros": total,
+        "extensoes": ultimo_historico.to_dict()["extensoes_detalhe"],
+        "detalhes": ultimo_historico.detalhes,
+        "data_verificacao": str(ultimo_historico.data_verificacao)
+    }), 200
 
 
 @app.route('/caminhos/<int:caminho_id>', methods=['PUT'])
@@ -662,6 +801,53 @@ def rota_protegida():
         "message": "Acesso autorizado com sucesso!",
         "utilizador_id": utilizador_id
     }), 200
+
+
+#gestao de alertas
+#rota para listar apenas os alertas que precisam de atencao
+@app.route('/api/alertas/pendentes', methods=['GET'])
+@jwt_required()
+def listar_alertas_pendentes():
+    #vai a bd bsucar os alertas ainda por resolver
+    alertas = Alerta.query.filter_by(estado_alerta='Por resolver').order_by(Alerta.data_hora.desc()).all()
+    
+    resultado = [alerta.to_dict() for alerta in alertas]
+    
+    return jsonify({
+        "total_pendentes": len(resultado),
+        "alertas": resultado
+    }), 200
+
+
+#rota para marcar um alerta como resolvido
+@app.route('/api/alertas/<int:id_alerta>/resolver', methods=['PUT'])
+@jwt_required()
+def resolver_alerta(id_alerta):
+    # Procura o alerta pelo ID
+    alerta = Alerta.query.get(id_alerta)
+    
+    if not alerta:
+        return jsonify({"erro": "Alerta não encontrado."}), 404
+        
+    #verifica se ja nao foi resolvido
+    if alerta.estado_alerta == 'Resolvido':
+        return jsonify({"mensagem": "Este alerta já se encontrava resolvido!"}), 200
+        
+    #muda o estado e guarda na bd
+    alerta.estado_alerta = 'Resolvido'
+    db.session.commit()
+    
+    return jsonify({
+        "mensagem": f"Alerta {id_alerta} marcado como resolvido com sucesso!",
+        "alerta": alerta.to_dict()
+    }), 200
+
+
+
+
+
+
+
 
 
 #ligar 
