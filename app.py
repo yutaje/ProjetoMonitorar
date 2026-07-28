@@ -10,8 +10,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask_jwt_extended import JWTManager, create_access_token
 from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
-from flask_jwt_extended import jwt_required, get_jwt_identity
-
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
+from functools import wraps
 
 
 
@@ -27,6 +27,24 @@ CORS(app)
 app.config["JWT_SECRET_KEY"] = "chave_ty_xi"
 
 jwt = JWTManager(app)
+
+
+#verifica se tem token e se é admin
+def admin_required(fn):
+    @wraps(fn)
+    def decorator(*args, **kwargs):
+        #obriga a ter token valido
+        verify_jwt_in_request()
+
+        #le o que esta dentro do token
+        claims = get_jwt()
+
+        #verifica se a role guardada no token é admin
+        if claims.get("role") == "admin":
+            return fn(*args, **kwargs)
+        else:
+            return jsonify({"error": "Acesso negado! Esta área é exclusiva para Administradores."}), 403
+    return decorator
 
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/teste_monitor'
@@ -79,6 +97,10 @@ class Historico(db.Model):
 
     estado = db.Column(db.String(50), nullable=False)
 
+    total_ficheiros = db.Column(db.Integer, default=0, nullable=False)
+
+    extensoes_detalhe = db.Column(db.Text, nullable=True)
+
     detalhes = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
@@ -87,7 +109,31 @@ class Historico(db.Model):
             'data_verificacao': str(self.data_verificacao),
             'caminho_id': self.caminho_id,
             'estado': self.estado,
+            'total_ficheiros': self.total_ficheiros,
+            'extensoes_detalhe': json.loads(self.extensoes_detalhe) if  self.extensoes_detalhe else {},
             'detalhes': self.detalhes
+        }
+
+
+class Alerta(db.Model):
+    __tablename__ = 'alerta'
+
+    id = db.Column(db.Integer, primary_key=True)
+    projeto_id = db.Column(db.Integer, db.ForeignKey('projeto.id'), nullable=False)
+    caminho_id = db.Column(db.Integer, db.ForeignKey('caminho.id'), nullable=False)
+    data_hora = db.Column(db.DateTime, default=db.func.now(), nullable=False)
+    tipo_erro = db.Column(db.String(200), nullable=False) 
+    estado_alerta = db.Column(db.String(50), default='Por resolver', nullable=False)
+
+    def to_dict(self):
+        return{
+            'id': self.id,
+            'projeto_id': self.projeto_id,
+            'caminho_id': self.caminho_id,
+            'data_hora': str(self.data_hora),
+            'tipo_erro': self.tipo_erro,
+            'estado_alerta': self.estado_alerta
+
         }
 
 
@@ -97,10 +143,13 @@ class User(db.Model):
     #guardar a passe encriptada
     password = db.Column(db.String(200), nullable=False)
 
+    role = db.Column(db.String(20), default='user', nullable=False)
+
     def to_dict(self):
         return{
             "id": self.id,
-            "username": self.username
+            "username": self.username,
+            "role": self.role
         }
 
 
@@ -118,24 +167,24 @@ def pagina_principal():
 
 #rota para listar todos os users
 @app.route('/users')
+@admin_required
 def listar_users():
-        todos_users = db.session.execute(db.select(Utilizador)).scalars().all()
-
-        lista = []
+    todos_users = User.query.all()
+    lista = []
 
     #percorrer users que vieram da bd
-        for user in todos_users:
-            lista.append({
-                'id': user.id,
-                'nome': user.nome,
-                'email': user.email
-            })
+    for user in todos_users:
+        lista.append({
+            'id': user.id,
+            'username': user.username
+        })
 
-        return jsonify(lista)
+    return jsonify(lista)
 
 
 #rota para criar novo projeto
 @app.route('/projetos', methods=['POST'])
+@jwt_required()
 def criar_projeto():
     dados = request.get_json()
 
@@ -160,6 +209,7 @@ def criar_projeto():
 
 #rota para listar os projs
 @app.route('/projetos', methods=['GET'])
+@jwt_required()
 def listar_projetos():
     todos_projetos = Projeto.query.all()
     resultado = [projeto.to_dict() for projeto in todos_projetos]
@@ -169,6 +219,7 @@ def listar_projetos():
 
 #rota para apagar um proj
 @app.route('/projetos/<int:projeto_id>', methods=['DELETE'])
+@admin_required
 def apagar_projeto(projeto_id):
     #procura proj pelo ID senao existe da erro
     projeto = Projeto.query.get_or_404(projeto_id)
@@ -197,6 +248,7 @@ def apagar_projeto(projeto_id):
 
 #rota para editar um proj
 @app.route('/projetos/<int:id>', methods=['PUT'])
+@jwt_required()
 def editar_projeto(id):
     #procura o proj na bd
     projeto = Projeto.query.get(id)
@@ -222,6 +274,7 @@ def editar_projeto(id):
 
 #rota para apagar um caminho individual
 @app.route('/caminhos/<int:caminho_id>', methods=['DELETE'])
+@admin_required
 def apagar_caminho(caminho_id):
     #procura o caminho pelo ID
     caminho = Caminho.query.get_or_404(caminho_id)
@@ -242,6 +295,7 @@ def apagar_caminho(caminho_id):
 
 #rota para editar um caminho individual
 @app.route('/caminhos/<int:id>', methods=['PUT'])
+@jwt_required()
 def editar_caminho(id):
     #prcura caminho pelo ID
     caminho = Caminho.query.get(id)
@@ -271,6 +325,7 @@ def editar_caminho(id):
 
 #rota para associar um novo caminho a um projeto
 @app.route('/projetos/<int:projeto_id>/caminhos', methods=['POST'])
+@jwt_required()
 def criar_caminho(projeto_id):
     #verificar se o proj existe na bd
     projeto = Projeto.query.get_or_404(projeto_id)
@@ -297,6 +352,7 @@ def criar_caminho(projeto_id):
 
 
 @app.route('/caminhos/<int:caminho_id>/verificar', methods=['POST'])
+@jwt_required()
 def verificar_caminho(caminho_id):
     #vai buscar o caminho a bd, se nao existir devolve 404
     caminho_obj = Caminho.query.get_or_404(caminho_id)
@@ -331,8 +387,31 @@ def verificar_caminho(caminho_id):
         "data_verificacao": str(novo_historico.data_verificacao)
     }), 201
 
+
+@app.route('/caminhos/<int:caminho_id>', methods=['PUT'])
+@jwt_required()
+def atualizar_caminho(caminho_id):
+    # vai buscar o caminho a bd
+    caminho_obj = Caminho.query.get_or_404(caminho_id)
+    
+    # le o JSON  
+    dados = request.get_json()
+    
+    # atualiza a localização se ela vier no JSON
+    if 'localizacao' in dados:
+        caminho_obj.localizacao = dados['localizacao']
+        db.session.commit()
+        return jsonify({
+            "mensagem": "Caminho atualizado com sucesso na Base de Dados!",
+            "nova_localizacao": caminho_obj.localizacao
+        }), 200
+        
+    return jsonify({"erro": "Nenhuma localização fornecida no JSON."}), 400
+
+
 #rota para listar caminhos de um proj
 @app.route('/projetos/<int:projeto_id>/caminhos', methods=['GET'])
+@jwt_required()
 def listar_caminhos_projeto(projeto_id):
 
     projeto = Projeto.query.get_or_404(projeto_id)
@@ -348,6 +427,7 @@ def listar_caminhos_projeto(projeto_id):
 
 #rota para consultar o historico de um caminho
 @app.route('/caminhos/<int:caminho_id>/historico', methods=['GET'])
+@jwt_required()
 def ver_historico_caminho(caminho_id):
     #verifica se o caminho existe
     caminho = Caminho.query.get_or_404(caminho_id)
@@ -368,6 +448,7 @@ def ver_historico_caminho(caminho_id):
 
 #rota para stats
 @app.route('/estatisticas', methods=['GET'])
+@admin_required
 def obter_estatisticas():
     #conta quantos registos existem em cada tabela
     total_projetos = Projeto.query.count()
@@ -387,6 +468,7 @@ def obter_estatisticas():
 
 #rota para o indice
 @app.route('/api/backups', methods=['GET'])
+@jwt_required()
 def listar_backups():
     try:
         #lista todos os ficheiros da pasta que sao JSON
@@ -410,6 +492,7 @@ def listar_backups():
 
 
 @app.route('/api/backups/<filename>', methods=['GET'])
+@jwt_required()
 def ler_backup(filename):
     try:
         #limpa o nome do ficheiro para segurança
@@ -442,6 +525,7 @@ def ler_backup(filename):
 
 #rota para gerar backup com os dados da bd
 @app.route('/api/backups/gerar', methods=['POST'])
+@admin_required
 def criar_backup_manual():
     try:
         #vai a bd buscar tudo
@@ -518,6 +602,7 @@ def register():
     dados = request.get_json()
     username = dados.get('username')
     password = dados.get('password')
+    role = dados.get('role', 'user')
 
     if not username or not password:
         return jsonify({"error": "Preenche o username e a password"}), 400
@@ -525,13 +610,12 @@ def register():
     #verifica se o user ja existe
     utilizador_existente = User.query.filter_by(username=username).first()
     if utilizador_existente:
-        utilizador_existente = User.query.filter_by(username=username). first()
         return jsonify({"error": "Esse username já existe!"}), 400
 
     #encripta a password antes de guardar
     password_criptografada = generate_password_hash(password)
 
-    novo_utilizador = User(username=username, password=password_criptografada)
+    novo_utilizador = User(username=username, password=password_criptografada, role=role)
 
     db.session.add(novo_utilizador)
     db.session.commit()
@@ -557,11 +641,15 @@ def login():
         return jsonify({"error": "Credênciais inválidas!"}), 401
 
     #se estives tudo certo, cria JWT token associado ao user ou ID
-    access_token = create_access_token(identity=str(utilizador.id))
+    access_token = create_access_token(
+        identity=str(utilizador.id), 
+        additional_claims={"role": utilizador.role}
+    )
 
     return jsonify({
         "message": "login efetuado com sucesso!",
-        "access_token": access_token
+        "access_token": access_token,
+        "role": utilizador.role
     }), 200
 
 
