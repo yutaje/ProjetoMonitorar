@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Monitor de Sistema</title>
+    <!-- Carregar o Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+    <!-- Barra de Navegação -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" id="titulo-navbar" href="#">🖥️ Dashboard</a>
+            <div class="d-flex">
+                <button id="btn-logout" class="btn btn-danger">Sair (Logout)</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Conteúdo Principal -->
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <h2 class="mb-4">Bem-vindo ao Painel de Controlo!</h2>
+                <p>O teu token JWT está a proteger esta página. Só entra quem tem a chave!</p>
+            </div>
+        </div>
+        
+        <!-- Cartões das métricas reais do teu sistema -->
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card p-4 text-center mb-3">
+                    <h5>📁 Projetos Ativos</h5>
+                    <h2 class="text-primary" id="metric-projetos">0</h2>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-4 text-center mb-3">
+                    <h5>⚠️ Alertas Pendentes</h5>
+                    <h2 class="text-danger" id="metric-alertas">0</h2>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-4 text-center mb-3">
+                    <h5>🔑 O teu Acesso (Role)</h5>
+                    <h2 class="text-success" id="metric-role">--</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ligar a lógica do Dashboard -->
+    <script src="dashboard.js"></script>
+</body>
+</html>

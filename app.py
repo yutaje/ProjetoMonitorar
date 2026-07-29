@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from functools import wraps
+from dotenv import load_dotenv
 
 
 
@@ -26,7 +27,11 @@ app = Flask(__name__)
 CORS(app)
 
 
-app.config["JWT_SECRET_KEY"] = "chave_ty_xi"
+load_dotenv()
+
+
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+
 
 jwt = JWTManager(app)
 
@@ -593,13 +598,21 @@ def obter_estatisticas():
     total_projetos = Projeto.query.count()
     total_caminhos = Caminho.query.count()
     total_verificacoes = Historico.query.count()
+    
+    #contagem de alertas 
+    alertas_pendentes = Alerta.query.filter_by(estado_alerta='Por resolver').count()
+    alertas_resolvidos = Alerta.query.filter_by(estado_alerta='Resolvido').count()
 
     #prep do relatorio final em JSON
     relatorio = {
         "dashboard": {
             "projetos_ativos": total_projetos,
             "caminhos_monitorizados": total_caminhos,
-            "verificacoes_realizadas": total_verificacoes
+            "verificacoes_realizadas": total_verificacoes,
+            "saude_sistema": {
+                "alertas_pendentes": alertas_pendentes,
+                "alertas_resolvidos": alertas_resolvidos
+            }
         }
     }
 
@@ -701,6 +714,26 @@ def criar_backup_manual():
         }), 500
 
 
+#rota para fazer scan quando quiser
+@app.route('/api/admin/forcar-scan', methods=['POST'])
+@admin_required
+def forcar_scan():
+    try:
+
+        gerar_scan_automatico()
+        
+        return jsonify({
+            "sucesso": True,
+            "mensagem": "Varredura manual forçada executada com sucesso!"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "sucesso": True, 
+            "erro": str(e)
+        }), 500
+
+
 #func que o robo vai executar solo
 def gerar_backup_automatico():
     #key para aceder a bd
@@ -725,6 +758,35 @@ def gerar_backup_automatico():
         return nome_ficheiro
 
 
+#func que o robo vai executar para procurar falhas
+def gerar_scan_automatico():
+    with app.app_context():
+        #vai buscar todos os caminhos a bd
+        todos_caminhos = Caminho.query.all()
+        
+        print(f"[{datetime.now()}] Iniciando scan automático de rotina...")
+        
+        for caminho in todos_caminhos:
+
+            estado, total = executar_scan_caminho(caminho)
+            
+            if estado not in ["OK", "Acessível", "Ativo"]: 
+                alerta_existente = Alerta.query.filter_by(caminho_id=caminho.id, estado_alerta='Por resolver').first()
+                
+                if not alerta_existente:
+                    novo_alerta = Alerta(
+                        projeto_id=caminho.projeto_id,
+                        caminho_id=caminho.id,
+                        tipo_erro=f"Erro de acesso: {estado}",
+                        estado_alerta='Por resolver'
+                    )
+                    db.session.add(novo_alerta)
+        
+        db.session.commit()
+        print(f"[{datetime.now()}] Scan automático concluído!")
+
+
+
 scheduler = BackgroundScheduler()
 
 # backup da manha
@@ -733,6 +795,9 @@ scheduler.add_job(func=gerar_backup_automatico, trigger="cron", hour=9, minute=1
 # backup da tarde
 scheduler.add_job(func=gerar_backup_automatico, trigger="cron", hour=17, minute=30)
 scheduler.start()
+
+
+scheduler.add_job(func=gerar_scan_automatico, trigger="interval", hours=2)
 
 
 #rota do registo
@@ -843,6 +908,19 @@ def resolver_alerta(id_alerta):
     }), 200
 
 
+#rota para consultar o historico de alertas resolvidos
+@app.route('/api/alertas/historico', methods=['GET'])
+@jwt_required()
+def listar_alertas_historico():
+    # vai a bd buscar os alertas ja resolvidos do mais recente para o mais antigo
+    alertas_resolvidos = Alerta.query.filter_by(estado_alerta='Resolvido').order_by(Alerta.data_hora.desc()).all()
+    
+    resultado = [alerta.to_dict() for alerta in alertas_resolvidos]
+    
+    return jsonify({
+        "total_resolvidos": len(resultado),
+        "alertas": resultado
+    }), 200
 
 
 
