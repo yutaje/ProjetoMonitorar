@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Projetos - Monitor de Sistema</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar unificada -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="dashboard.html">🖥️ Dashboard</a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="dashboard.html">📊 Visão Geral</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="projetos.html">📁 Gestão de Projetos</a></li>
+                    <li class="nav-item"><a class="nav-link" href="alertas.html">⚠️ Alertas</a></li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-2">
+                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none">⚙️ Painel Admin</a>
+                    <button id="btn-logout" class="btn btn-danger btn-sm">Sair (Logout)</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Conteúdo Principal -->
+    <div class="container pb-5">
+        <div class="row mb-4 align-items-center">
+            <div class="col-md-8">
+                <h2>📁 Gestão de Projetos e Caminhos</h2>
+                <p class="text-muted">Cria novos projetos, adiciona diretórios de pastas para monitorização em tempo real.</p>
+            </div>
+            <div class="col-md-4 text-md-end">
+                <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#modalCriarProjeto">➕ Novo Projeto</button>
+            </div>
+        </div>
+
+        <!-- Alerta dinâmico de feedback -->
+        <div id="mensagem-alerta" class="alert d-none mb-4" role="alert"></div>
+
+        <!-- Contentor dos Projetos -->
+        <div id="lista-projetos-container" class="row g-4">
+            <!-- Preenchido via JavaScript -->
+        </div>
+    </div>
+
+    <!-- MODAL: CRIAR NOVO PROJETO -->
+    <div class="modal fade" id="modalCriarProjeto" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Criar Novo Projeto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-novo-projeto">
+                        <div class="mb-3">
+                            <label for="nome-projeto" class="form-label fw-bold">Nome do Projeto:</label>
+                            <input type="text" id="nome-projeto" class="form-control" placeholder="Ex: Backups Servidor Principal" autocomplete="off" required>
+                        </div>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-success fw-bold">Criar Projeto</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const token = localStorage.getItem('meu_token_jwt');
+        if (!token) {
+            alert("Acesso negado! Tens de fazer login primeiro.");
+            window.location.href = "login.html";
+        }
+
+        // Botão Logout
+        document.getElementById('btn-logout').addEventListener('click', function() {
+            localStorage.removeItem('meu_token_jwt');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('username'); 
+            window.location.href = "login.html";
+        });
+
+        // Mostrar botão admin se for admin
+        const userRole = localStorage.getItem('user_role');
+        if (userRole === 'admin') {
+            const btnAdmin = document.getElementById('btn-admin');
+            if (btnAdmin) btnAdmin.classList.remove('d-none');
+        }
+
+        const msg = document.getElementById('mensagem-alerta');
+        function mostrarMsg(texto, tipo = 'success') {
+            msg.textContent = texto;
+            msg.className = `alert alert-${tipo} mb-4 fw-bold`;
+            msg.classList.remove('d-none');
+            setTimeout(() => msg.classList.add('d-none'), 4000);
+        }
+
+        // Carregar Projetos e respetivos Caminhos
+        async function carregarProjetos() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/projetos', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!res.ok) return;
+
+                const projetos = await res.json();
+                const container = document.getElementById('lista-projetos-container');
+                container.innerHTML = '';
+
+                if (projetos.length === 0) {
+                    container.innerHTML = `<div class="col-12"><div class="card p-4 text-center bg-white"><p class="text-muted m-0">Nenhum projeto registado de momento.</p></div></div>`;
+                    return;
+                }
+
+                for (let p of projetos) {
+                    // Buscar caminhos de cada projeto
+                    const resCaminhos = await fetch(`http://127.0.0.1:5000/projetos/${p.id}/caminhos`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    let caminhos = [];
+                    if (resCaminhos.ok) {
+                        caminhos = await resCaminhos.json();
+                    }
+
+                    let caminhosHtml = '';
+                    if (caminhos.length === 0) {
+                        caminhosHtml = `<li class="list-group-item text-muted small bg-light">Sem caminhos associados.</li>`;
+                    } else {
+                        caminhos.forEach(c => {
+                            caminhosHtml += `
+                                <li class="list-group-item d-flex justify-content-between align-items-center small">
+                                    <span>📁 ${c.localizacao}</span>
+                                    <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="apagarCaminho(${c.id})" title="Remover caminho">❌</button>
+                                </li>`;
+                        });
+                    }
+
+                    // Verifica se o user é admin para permitir apagar o projeto inteiro
+                    let botaoApagarProjeto = '';
+                    if (userRole === 'admin') {
+                        botaoApagarProjeto = `<button class="btn btn-sm btn-outline-danger" onclick="apagarProjeto(${p.id}, '${p.nome}')">🗑️ Apagar Projeto</button>`;
+                    }
+
+                    container.innerHTML += `
+                        <div class="col-md-6">
+                            <div class="card p-4 h-100 bg-white shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h4 class="text-primary m-0">📂 ${p.nome}</h4>
+                                    ${botaoApagarProjeto}
+                                </div>
+                                <hr class="text-muted my-2">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted small fw-bold">Diretórios monitorizados:</span>
+                                    <button class="btn btn-sm btn-outline-success fw-bold" onclick="adicionarCaminho(${p.id})">➕ Adicionar Caminho</button>
+                                </div>
+                                <ul class="list-group list-group-flush mb-2">
+                                    ${caminhosHtml}
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error("Erro ao carregar projetos:", e);
+            }
+        }
+
+        // Criar Novo Projeto
+        document.getElementById('form-novo-projeto').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const nomeProjeto = document.getElementById('nome-projeto').value.trim();
+            if (!nomeProjeto) return;
+
+            try {
+                const res = await fetch('http://127.0.0.1:5000/projetos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ nome: nomeProjeto })
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    const modalEl = document.getElementById('modalCriarProjeto');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    modal.hide();
+
+                    document.getElementById('form-novo-projeto').reset();
+                    mostrarMsg("Projeto criado com sucesso!", "success");
+                    carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao criar projeto.", "danger");
+                }
+            } catch (error) {
+                mostrarMsg("Erro de ligação ao servidor.", "danger");
+            }
+        });
+
+        // Adicionar Caminho a um Projeto
+        async function adicionarCaminho(projetoId) {
+            const localizacao = prompt("Indica o caminho completo da pasta a monitorizar (ex: C:/MeusProjetos/Pasta):");
+            if (!localizacao || !localizacao.trim()) return;
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}/caminhos`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ localizacao: localizacao.trim() })
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg("Caminho associado com sucesso!", "success");
+                    carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao associar caminho.", "danger");
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", "danger");
+            }
+        }
+
+        // Apagar um Caminho Individual
+        async function apagarCaminho(caminhoId) {
+            if (!confirm("Tens a certeza que pretendes remover este caminho?")) return;
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/caminhos/${caminhoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg("Caminho removido com sucesso!", "success");
+                    carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao apagar caminho.", "danger");
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", "danger");
+            }
+        }
+
+        // Apagar um Projeto (Apenas Admin)
+        async function apagarProjeto(projetoId, nomeProjeto) {
+            if (!confirm(`Tens a certeza que pretendes apagar o projeto "${nomeProjeto}" e todos os seus caminhos?`)) return;
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg(dados.mensagem || "Projeto apagado com sucesso!", "success");
+                    carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao apagar projeto.", "danger");
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", "danger");
+            }
+        }
+
+        // Inicializar carregamento
+        carregarProjetos();
+    </script>
+</body>
+</html>

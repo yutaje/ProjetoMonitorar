@@ -1,97 +1,70 @@
-//verifica a sec ao abrir a pagina
 const token = localStorage.getItem('meu_token_jwt');
 
-// senao houver token redireciona para a login page
 if (!token) {
     alert("Acesso negado! Tens de fazer login primeiro.");
     window.location.href = "login.html";
 }
 
-//logout button
+// Botão de Logout
 document.getElementById('btn-logout').addEventListener('click', function() {
     localStorage.removeItem('meu_token_jwt');
     localStorage.removeItem('user_role');
     localStorage.removeItem('username'); 
-    
-    //manda o user de novo para a login page
     window.location.href = "login.html";
 });
 
-//mostra o user na navbar
+// Mostra o user na navbar entre parênteses
 const nomeUtilizador = localStorage.getItem('username');
-
-//se houver um nome guardado, atualiza
 if (nomeUtilizador) {
     document.getElementById('titulo-navbar').textContent = `🖥️ Dashboard (${nomeUtilizador})`;
 }
 
-//vai buscar dados reais a API
-async function carregarDadosDashboard() {
+// Função para atualizar as métricas e dados de hardware de forma limpa
+async function atualizarMetricasDashboard() {
     try {
-        //vai buscar os projs
+        // 1. Contagem de Projetos Ativos
         const resProjetos = await fetch('http://127.0.0.1:5000/projetos', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // O teu token a abrir as portas!
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-
         if (resProjetos.ok) {
             const projetos = await resProjetos.json();
             document.getElementById('metric-projetos').textContent = projetos.length;
         }
 
-        // vai buscar os alertas pendentes
+        // 2. Alertas Pendentes
         const resAlertas = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-
         if (resAlertas.ok) {
             const dadosAlertas = await resAlertas.json();
-            // Injeta o número de alertas pendentes no HTML
             document.getElementById('metric-alertas').textContent = dadosAlertas.total_pendentes;
         }
 
-        // mostra a role do user
-        const userRole = localStorage.getItem('user_role');
-        if (userRole) {
-            document.getElementById('metric-role').textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
-            
-            // se for admin, mostra o botão do painel
-            const btnAdmin = document.getElementById('btn-admin');
-            if (userRole === 'admin' && btnAdmin) {
-                btnAdmin.classList.remove('d-none');
-            }
-        }
-
-        // vai buscar as cenas do pc
+        // 3. Recursos da Máquina (CPU, RAM, Disco)
         const resSistema = await fetch('http://127.0.0.1:5000/api/system', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-
         if (resSistema.ok) {
             const dadosPC = await resSistema.json();
             document.getElementById('metric-cpu').textContent = dadosPC.cpu + '%';
             document.getElementById('metric-ram').textContent = dadosPC.ram + '%';
             document.getElementById('metric-disk').textContent = dadosPC.disk + '%';
         }
-
     } catch (erro) {
-        console.error("Erro ao contactar o servidor:", erro);
+        console.error("Erro ao atualizar métricas:", erro);
     }
 }
 
-// Correr a função mal o Dashboard abre para não ficarem a zero
-carregarDadosDashboard();
+// Mostrar role do utilizador e botão de admin se aplicável
+const userRole = localStorage.getItem('user_role');
+if (userRole) {
+    document.getElementById('metric-role').textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+    const btnAdmin = document.getElementById('btn-admin');
+    if (userRole === 'admin' && btnAdmin) {
+        btnAdmin.classList.remove('d-none');
+    }
+}
 
-// atualiza os dados de 2 em 2 segundos
-setInterval(carregarDadosDashboard, 2000);
+// Executa na abertura e atualiza a cada 2 segundos
+atualizarMetricasDashboard();
+setInterval(atualizarMetricasDashboard, 2000);

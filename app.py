@@ -110,6 +110,17 @@ class Historico(db.Model):
 
     detalhes = db.Column(db.Text, nullable=True)
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'data_verificacao': str(self.data_verificacao),
+            'caminho_id': self.caminho_id,
+            'estado': self.estado,
+            'total_ficheiros': self.total_ficheiros,
+            'extensoes_detalhe': json.loads(self.extensoes_detalhe) if  self.extensoes_detalhe else {},
+            'detalhes': self.detalhes
+        }
+
 
 class LogAtividade(db.Model):
     __tablename__ = 'log_atividade'
@@ -136,18 +147,6 @@ def registar_log(user_id, acao, detalhes=None):
     novo_log = LogAtividade(user_id=user_id, acao=acao, detalhes=detalhes)
     db.session.add(novo_log)
     db.session.commit()
-
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'data_verificacao': str(self.data_verificacao),
-            'caminho_id': self.caminho_id,
-            'estado': self.estado,
-            'total_ficheiros': self.total_ficheiros,
-            'extensoes_detalhe': json.loads(self.extensoes_detalhe) if  self.extensoes_detalhe else {},
-            'detalhes': self.detalhes
-        }
 
 
 class Alerta(db.Model):

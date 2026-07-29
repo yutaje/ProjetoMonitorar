@@ -77,6 +77,7 @@
                 if (res.ok) {
                     localStorage.setItem('meu_token_jwt', dados.access_token);
                     localStorage.setItem('user_role', dados.role);
+                    localStorage.setItem('username', usernameInput);
                     window.location.href = "dashboard.html";
                 } else {
                     const mensagem = dados.error || dados.erro || "Credenciais inválidas!";
