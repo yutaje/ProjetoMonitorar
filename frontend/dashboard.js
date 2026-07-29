@@ -61,6 +61,28 @@ async function carregarDadosDashboard() {
         const userRole = localStorage.getItem('user_role');
         if (userRole) {
             document.getElementById('metric-role').textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+            
+            // se for admin, mostra o botão do painel
+            const btnAdmin = document.getElementById('btn-admin');
+            if (userRole === 'admin' && btnAdmin) {
+                btnAdmin.classList.remove('d-none');
+            }
+        }
+
+        // vai buscar as cenas do pc
+        const resSistema = await fetch('http://127.0.0.1:5000/api/system', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (resSistema.ok) {
+            const dadosPC = await resSistema.json();
+            document.getElementById('metric-cpu').textContent = dadosPC.cpu + '%';
+            document.getElementById('metric-ram').textContent = dadosPC.ram + '%';
+            document.getElementById('metric-disk').textContent = dadosPC.disk + '%';
         }
 
     } catch (erro) {
@@ -71,5 +93,5 @@ async function carregarDadosDashboard() {
 // Correr a função mal o Dashboard abre para não ficarem a zero
 carregarDadosDashboard();
 
-// atualiza os dados de 5 em 5 segundos
-setInterval(carregarDadosDashboard, 5000);
+// atualiza os dados de 2 em 2 segundos
+setInterval(carregarDadosDashboard, 2000);

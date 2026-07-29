@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin - Ferramentas e Definições</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar de Administração -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="admin.html">⚙️ Painel Admin</a>
+            
+            <div class="d-flex align-items-center">
+                <a href="dashboard.html" class="btn btn-outline-light btn-sm me-2">⬅️ Dashboard</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="admin.html">📊 Visão Geral</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-users.html">👥 Utilizadores</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="admin-tools.html">🛠️ Ferramentas</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-logs.html">📜 Logs de Atividade</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <h2 class="mb-4">Ferramentas de Manutenção e Configuração</h2>
+        
+        <!-- Caixa de Alerta Dinâmica e Destacada -->
+        <div id="mensagem-alerta" class="alert d-none shadow-sm fw-bold mb-4" role="alert"></div>
+
+        <!-- SECÇÃO DE FERRAMENTAS MANUAIS -->
+        <div class="row mb-5">
+            <div class="col-md-6">
+                <div class="card p-4 text-center h-100 bg-white">
+                    <h4>🔍 Forçar Scan de Rotina</h4>
+                    <p class="text-muted">Executa a verificação física imediata de todos os caminhos e atualiza os estados.</p>
+                    <button id="btn-scan" class="btn btn-primary mt-auto py-2">Executar Scan Agora</button>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card p-4 text-center h-100 bg-white">
+                    <h4>💾 Gerar Backup Manual</h4>
+                    <p class="text-muted">Cria um ficheiro JSON com o snapshot dos metadados e estado atual da base de dados.</p>
+                    <button id="btn-backup" class="btn btn-success mt-auto py-2">Criar Backup Agora</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECÇÃO DE CONFIGURAÇÃO DO SCHEDULER -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card p-4 bg-white shadow-sm">
+                    <h4 class="mb-3">⏱️ Configuração do Agendador (Scheduler)</h4>
+                    <p class="text-muted mb-4">Ajusta o comportamento dos robôs automáticos do sistema em tempo real.</p>
+                    
+                    <form id="form-config" onsubmit="guardarConfiguracoes(event)">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="intervalo-scan" class="form-label fw-bold">Intervalo de Scans Automáticos (Horas):</label>
+                                <input type="number" id="intervalo-scan" class="form-control" min="1" max="24" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="backup-manha" class="form-label fw-bold">Hora do Backup da Manhã:</label>
+                                <input type="time" id="backup-manha" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="backup-tarde" class="form-label fw-bold">Hora do Backup da Tarde:</label>
+                                <input type="time" id="backup-tarde" class="form-control" required>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 text-end">
+                            <button type="submit" id="btn-guardar-config" class="btn btn-dark px-4 py-2 fw-bold">💾 Guardar Configurações</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const token = localStorage.getItem('meu_token_jwt');
+        if (!token || localStorage.getItem('user_role') !== 'admin') {
+            window.location.href = "dashboard.html";
+        }
+
+        const msg = document.getElementById('mensagem-alerta');
+        
+        function mostrarMsg(texto, tipo = 'success') {
+            const icone = tipo === 'success' ? '✅' : '❌';
+            msg.innerHTML = `${icone} ${texto}`;
+            msg.className = `alert alert-${tipo} shadow-sm fw-bold mb-4`;
+            msg.classList.remove('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 1. Carregar as configurações atuais ao abrir a página
+        async function carregarConfiguracoes() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/admin/config', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('intervalo-scan').value = data.intervalo_scan_horas || 2;
+                    document.getElementById('backup-manha').value = data.hora_backup_manha || "09:15";
+                    document.getElementById('backup-tarde').value = data.hora_backup_tarde || "17:30";
+                }
+            } catch (e) {
+                console.error("Erro ao carregar configurações:", e);
+            }
+        }
+
+        // 2. Guardar as novas configurações
+        async function guardarConfiguracoes(event) {
+            event.preventDefault();
+            const btn = document.getElementById('btn-guardar-config');
+            btn.disabled = true;
+            btn.textContent = "A guardar...";
+
+            const novasConfig = {
+                "intervalo_scan_horas": document.getElementById('intervalo-scan').value,
+                "hora_backup_manha": document.getElementById('backup-manha').value,
+                "hora_backup_tarde": document.getElementById('backup-tarde').value
+            };
+
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/admin/config', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(novasConfig)
+                });
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg(dados.message || "Configurações atualizadas com sucesso!", 'success');
+                } else {
+                    mostrarMsg(dados.error || "Erro ao atualizar configurações.", 'danger');
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "💾 Guardar Configurações";
+            }
+        }
+
+        // Ação para o Scan Forçado
+        document.getElementById('btn-scan').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-scan');
+            btn.disabled = true; 
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A executar scan...`;
+            msg.classList.add('d-none');
+
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/admin/forcar-scan', {
+                    method: 'POST', 
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const dados = await res.json();
+                
+                if (res.ok) {
+                    mostrarMsg(dados.mensagem || "Varredura manual concluída com sucesso!", 'success');
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao executar o scan.", 'danger');
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+            } finally {
+                btn.disabled = false; 
+                btn.textContent = "Executar Scan Agora";
+            }
+        });
+
+        // Ação para o Backup Manual
+        document.getElementById('btn-backup').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-backup');
+            btn.disabled = true; 
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A gerar backup...`;
+            msg.classList.add('d-none');
+
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/backups/gerar', {
+                    method: 'POST', 
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const dados = await res.json();
+                
+                if (res.ok) {
+                    mostrarMsg(`${dados.mensagem} Ficheiro guardado com sucesso!`, 'success');
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao gerar o backup.", 'danger');
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+            } finally {
+                btn.disabled = false; 
+                btn.textContent = "Criar Backup Agora";
+            }
+        });
+
+        // Executa ao carregar a página
+        carregarConfiguracoes();
+    </script>
+</body>
+</html>

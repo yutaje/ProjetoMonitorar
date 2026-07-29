@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin - Utilizadores</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="admin.html">⚙️ Painel Admin</a>
+            
+            <div class="d-flex align-items-center">
+                <a href="dashboard.html" class="btn btn-outline-light btn-sm me-2">⬅️ Dashboard</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="admin.html">📊 Visão Geral</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="admin-users.html">👥 Utilizadores</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-tools.html">🛠️ Ferramentas</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-logs.html">📜 Logs de Atividade</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <h2 class="mb-4">Gestão de Utilizadores e Cargos</h2>
+        
+        <div id="mensagem-alerta" class="alert d-none mb-4" role="alert"></div>
+
+        <!-- FORMULÁRIO PARA ADICIONAR NOVO UTILIZADOR -->
+        <div class="card p-4 shadow-sm border-0 bg-white mb-4">
+            <h4 class="mb-3">➕ Adicionar Novo Utilizador</h4>
+            <form id="form-criar-user" onsubmit="criarUtilizador(event)">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="novo-username" class="form-label fw-bold">Username:</label>
+                        <input type="text" id="novo-username" class="form-control" autocomplete="off" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="novo-password" class="form-label fw-bold">Password:</label>
+                        <input type="password" id="novo-password" class="form-control" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="novo-role" class="form-label fw-bold">Cargo:</label>
+                        <select id="novo-role" class="form-select">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" id="btn-criar" class="btn btn-success w-100 fw-bold">Criar User</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- TABELA DE UTILIZADORES -->
+        <div class="card p-4 shadow-sm border-0 bg-white">
+            <h4 class="mb-3">📋 Lista de Utilizadores Registados</h4>
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Cargo Atual</th>
+                        <th>Gerir Cargo & Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-utilizadores">
+                    <!-- Preenchido via JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const token = localStorage.getItem('meu_token_jwt');
+        if (!token || localStorage.getItem('user_role') !== 'admin') {
+            window.location.href = "dashboard.html";
+        }
+
+        const msg = document.getElementById('mensagem-alerta');
+        function mostrarMsg(texto, tipo = 'success') {
+            msg.textContent = texto;
+            msg.className = `alert alert-${tipo} mb-4`;
+            msg.classList.remove('d-none');
+        }
+
+        async function carregarUtilizadores() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/users', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const users = await res.json();
+                    const tbody = document.getElementById('tabela-utilizadores');
+                    tbody.innerHTML = '';
+                    
+                    users.forEach(u => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${u.id}</td>
+                                <td><strong>${u.username}</strong></td>
+                                <td><span class="badge bg-${u.role === 'admin' ? 'danger' : 'secondary'}">${u.role}</span></td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="input-group input-group-sm" style="max-width: 200px;">
+                                            <select class="form-select" id="select-role-${u.id}">
+                                                <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+                                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                            </select>
+                                            <button class="btn btn-outline-primary" onclick="atualizarCargo(${u.id})">Guardar</button>
+                                        </div>
+                                        <button class="btn btn-danger btn-sm" onclick="apagarUtilizador(${u.id}, '${u.username}')" title="Apagar Utilizador">🗑️ Apagar</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (e) {
+                console.error("Erro ao carregar utilizadores:", e);
+            }
+        }
+
+        async function criarUtilizador(event) {
+            event.preventDefault();
+            const usernameInput = document.getElementById('novo-username').value.trim();
+            const passwordInput = document.getElementById('novo-password').value.trim();
+            const roleInput = document.getElementById('novo-role').value;
+            const btnCriar = document.getElementById('btn-criar');
+
+            btnCriar.disabled = true;
+            btnCriar.textContent = "A criar...";
+            msg.classList.add('d-none');
+
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ username: usernameInput, password: passwordInput, role: roleInput })
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg(dados.message || "Utilizador criado com sucesso!", 'success');
+                    document.getElementById('form-criar-user').reset();
+                    carregarUtilizadores();
+                } else {
+                    mostrarMsg(dados.error || dados.erro || "Erro ao criar utilizador.", 'danger');
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+            } finally {
+                btnCriar.disabled = false;
+                btnCriar.textContent = "Criar User";
+            }
+        }
+
+        async function atualizarCargo(userId) {
+            const novoCargo = document.getElementById(`select-role-${userId}`).value;
+            msg.classList.add('d-none');
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/users/${userId}/role`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ role: novoCargo })
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg(dados.message, 'success');
+                    carregarUtilizadores();
+                } else {
+                    mostrarMsg(dados.error || "Erro ao atualizar cargo.", 'danger');
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+            }
+        }
+
+        async function apagarUtilizador(userId, username) {
+            if (!confirm(`Tens a certeza que pretendes apagar o utilizador "${username}"?`)) {
+                return;
+            }
+
+            msg.classList.add('d-none');
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    mostrarMsg(dados.message || "Utilizador apagado com sucesso!", 'success');
+                    carregarUtilizadores();
+                } else {
+                    mostrarMsg(dados.error || dados.erro || "Erro ao apagar utilizador.", 'danger');
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+            }
+        }
+
+        carregarUtilizadores();
+    </script>
+</body>
+</html>

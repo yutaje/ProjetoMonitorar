@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin - Registo de Logs</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar de Administração -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="admin.html">⚙️ Painel Admin</a>
+            
+            <div class="d-flex align-items-center">
+                <a href="dashboard.html" class="btn btn-outline-light btn-sm me-2">⬅️ Dashboard</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="admin.html">📊 Visão Geral</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-users.html">👥 Utilizadores</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-tools.html">🛠️ Ferramentas</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="admin-logs.html">📜 Logs de Atividade</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Conteúdo Principal -->
+    <div class="container pb-5">
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2>Registo de Atividade do Sistema (Logs)</h2>
+                <p class="text-muted">Auditoria em tempo real de quem fez o quê e quando no sistema.</p>
+            </div>
+        </div>
+
+        <!-- BARRA DE FILTROS E EXPORTAÇÃO -->
+        <div class="card p-3 mb-4 bg-white shadow-sm border-0">
+            <div class="row align-items-end g-3">
+                <div class="col-md-4">
+                    <label for="filtro-acao" class="form-label fw-bold text-secondary">Filtrar por Ação:</label>
+                    <select id="filtro-acao" class="form-select" onchange="renderizarLogs()">
+                        <option value="TODAS">Todas as Ações</option>
+                        <option value="ALTERAR_CARGO">Alterar Cargo</option>
+                        <option value="GERAR_BACKUP">Gerar Backup</option>
+                        <option value="CRIAR_PROJETO">Criar Projeto</option>
+                        <option value="EDITAR_PROJETO">Editar Projeto</option>
+                        <option value="APAGAR_PROJETO">Apagar Projeto</option>
+                        <option value="FORCAR_SCAN">Forçar Scan</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label for="filtro-data" class="form-label fw-bold text-secondary">Filtrar por Dia Específico:</label>
+                    <input type="date" id="filtro-data" class="form-control" onchange="renderizarLogs()">
+                </div>
+
+                <!-- Botões com espaçamento adequado e margens corrigidas -->
+                <div class="col-md-4 text-md-end d-flex justify-content-md-end gap-2">
+                    <button class="btn btn-outline-secondary px-3" onclick="limparFiltros()" title="Limpar filtros aplicados">🔄 Limpar</button>
+                    <button class="btn btn-success fw-bold px-3" onclick="exportarLogsCSV()">📥 Exportar CSV</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABELA DE LOGS -->
+        <div class="card p-4 bg-white shadow-sm border-0">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Data / Hora</th>
+                        <th>Utilizador</th>
+                        <th>Ação</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-logs">
+                    <!-- Preenchido via JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const token = localStorage.getItem('meu_token_jwt');
+        if (!token || localStorage.getItem('user_role') !== 'admin') {
+            window.location.href = "dashboard.html";
+        }
+
+        let todosOsLogs = [];
+
+        function obterCorBadge(acao) {
+            switch (acao) {
+                case 'GERAR_BACKUP': return 'bg-success';
+                case 'ALTERAR_CARGO': return 'bg-danger';
+                case 'APAGAR_PROJETO': return 'bg-dark';
+                case 'CRIAR_PROJETO': return 'bg-primary';
+                case 'EDITAR_PROJETO': return 'bg-warning text-dark';
+                case 'FORCAR_SCAN': return 'bg-info text-dark';
+                default: return 'bg-secondary';
+            }
+        }
+
+        function obterLogsFiltrados() {
+            const acaoFiltro = document.getElementById('filtro-acao').value;
+            const dataFiltro = document.getElementById('filtro-data').value;
+
+            return todosOsLogs.filter(log => {
+                let passaAcao = (acaoFiltro === 'TODAS' || log.acao === acaoFiltro);
+                let passaData = true;
+
+                if (dataFiltro) {
+                    passaData = log.data_hora.startsWith(dataFiltro);
+                }
+
+                return passaAcao && passaData;
+            });
+        }
+
+        function renderizarLogs() {
+            const tbody = document.getElementById('tabela-logs');
+            tbody.innerHTML = '';
+
+            const logsFiltrados = obterLogsFiltrados();
+
+            if (logsFiltrados.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">Nenhum registo encontrado com os filtros selecionados.</td></tr>`;
+                return;
+            }
+
+            logsFiltrados.forEach(log => {
+                const classeCor = obterCorBadge(log.acao);
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${log.id}</td>
+                        <td><small class="text-muted">${log.data_hora}</small></td>
+                        <td><strong>${log.username}</strong></td>
+                        <td><span class="badge ${classeCor}">${log.acao}</span></td>
+                        <td>${log.detalhes || '-'}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function limparFiltros() {
+            document.getElementById('filtro-acao').value = 'TODAS';
+            document.getElementById('filtro-data').value = '';
+            renderizarLogs();
+        }
+
+        function exportarLogsCSV() {
+            const logsParaExportar = obterLogsFiltrados();
+
+            if (logsParaExportar.length === 0) {
+                alert("Não existem logs para exportar com os filtros atuais!");
+                return;
+            }
+
+            let csvContent = "\uFEFFID,Data/Hora,Utilizador,Acao,Detalhes\n";
+
+            logsParaExportar.forEach(log => {
+                let detalhesLimpos = (log.detalhes || '').replace(/"/g, '""');
+                csvContent += `"${log.id}","${log.data_hora}","${log.username}","${log.acao}","${detalhesLimpos}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            
+            // Lógica inteligente para o nome do ficheiro dinâmico
+            const acaoSelecionada = document.getElementById('filtro-acao').value;
+            const dataSelecionada = document.getElementById('filtro-data').value;
+            
+            let nomeFicheiro = "logs_sistema";
+            if (acaoSelecionada !== 'TODAS') {
+                nomeFicheiro += `_${acaoSelecionada.toLowerCase()}`;
+            }
+            if (dataSelecionada) {
+                nomeFicheiro += `_${dataSelecionada}`;
+            } else {
+                nomeFicheiro += "_geral";
+            }
+            nomeFicheiro += ".csv";
+
+            link.setAttribute("href", url);
+            link.setAttribute("download", nomeFicheiro);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function carregarLogs() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/admin/logs', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    todosOsLogs = await res.json();
+                    renderizarLogs();
+                }
+            } catch (e) {
+                console.error("Erro ao carregar logs:", e);
+            }
+        }
+
+        carregarLogs();
+    </script>
+</body>
+</html>

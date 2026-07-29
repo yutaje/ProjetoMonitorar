@@ -3,49 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Monitor de Sistema</title>
-    <!-- Bootstrap para design rápido -->
+    <title>Login - Monitor de Projetos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { 
-            background-color: #f4f7f6; 
-            height: 100vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-        }
-        .login-card { 
-            background: white; 
-            padding: 40px; 
-            border-radius: 10px; 
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1); 
-            width: 100%; 
-            max-width: 400px; 
-        }
+        body { background-color: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; background: white; padding: 30px; }
     </style>
 </head>
 <body>
 
-    <div class="login-card">
-        <h3 class="text-center mb-4">🖥️ Monitor de Sistema</h3>
-        
-        <!-- Alerta para mensagens de erro -->
-        <div id="mensagem-erro" class="alert alert-danger d-none" role="alert"></div>
+    <div class="card">
+        <h3 class="text-center mb-4">🔐 Entrar no Sistema</h3>
 
-        <form id="form-login">
-            <div class="mb-3">
-                <label class="form-label">Username</label>
-                <input type="text" id="username" class="form-control" required>
+        <div id="erro-msg" style="color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: center; font-weight: bold; display: none;"></div>
+
+        <div class="mb-3">
+            <label for="username" class="form-label">Username:</label>
+            <input type="text" id="username" class="form-control" autocomplete="off" oninput="esconderErro()">
+        </div>
+
+        <div class="mb-3">
+            <label for="password" class="form-label">Password:</label>
+            <div class="input-group">
+                <input type="password" id="password" class="form-control" oninput="esconderErro()">
+                <button class="btn btn-outline-secondary" type="button" id="btn-toggle-pass" onclick="togglePassword()">👁️</button>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input type="password" id="password" class="form-control" required>
-            </div>
-            <button type="submit" class="btn btn-primary w-100">Entrar</button>
-        </form>
+        </div>
+
+        <button type="button" id="btn-entrar" class="btn btn-primary w-100 py-2 fw-bold mt-2" onclick="fazerLogin()">Entrar</button>
     </div>
 
-    <!-- Liga este HTML ao nosso ficheiro JavaScript -->
-    <script src="login.js"></script>
+    <script>
+        function esconderErro() {
+            const caixa = document.getElementById('erro-msg');
+            caixa.style.display = 'none';
+            caixa.textContent = '';
+        }
+
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const btnToggle = document.getElementById('btn-toggle-pass');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                btnToggle.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                btnToggle.textContent = '👁️';
+            }
+        }
+
+        async function fazerLogin() {
+            const usernameInput = document.getElementById('username').value.trim();
+            const passwordInput = document.getElementById('password').value.trim();
+            const btnEntrar = document.getElementById('btn-entrar');
+            const caixaErro = document.getElementById('erro-msg');
+
+            caixaErro.style.display = 'none';
+            caixaErro.textContent = '';
+
+            btnEntrar.disabled = true;
+            btnEntrar.textContent = "A entrar...";
+
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: usernameInput, password: passwordInput })
+                });
+
+                const dados = await res.json();
+
+                if (res.ok) {
+                    localStorage.setItem('meu_token_jwt', dados.access_token);
+                    localStorage.setItem('user_role', dados.role);
+                    window.location.href = "dashboard.html";
+                } else {
+                    const mensagem = dados.error || dados.erro || "Credenciais inválidas!";
+                    caixaErro.textContent = "⚠️ " + mensagem;
+                    caixaErro.style.display = 'block';
+                }
+            } catch (e) {
+                caixaErro.textContent = "⚠️ Erro de ligação ao servidor Flask.";
+                caixaErro.style.display = 'block';
+            } finally {
+                btnEntrar.disabled = false;
+                btnEntrar.textContent = "Entrar";
+            }
+        }
+
+        document.addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                fazerLogin();
+            }
+        });
+    </script>
 </body>
 </html>
