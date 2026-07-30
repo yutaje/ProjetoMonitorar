@@ -22,7 +22,6 @@
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Navbar Limpa sem Dropdown -->
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item"><a class="nav-link" href="dashboard.html">📊 Visão Geral</a></li>
                     <li class="nav-item"><a class="nav-link active" href="projetos.html">📁 Gestão de Projetos</a></li>
@@ -114,10 +113,21 @@
             }
         }
 
-        // Função vazia só para não dar erro no console se clicares antes de programares o resto
-        function abrirPasta(caminho) {
-            console.log("A preparar para abrir a pasta:", caminho);
-            // Aqui pões a tua lógica depois!
+        // ===== FUNÇÃO ABRIR PASTA CORRIGIDA =====
+        function abrirPastaDoBotao(botao) {
+            let caminho = botao.getAttribute('data-caminho');
+            if (!caminho) {
+                console.error("Caminho vazio!");
+                return;
+            }
+            // Converte \ para /
+            caminho = caminho.replace(/\\/g, '/');
+            // Codifica o caminho para suportar espaços, acentos, etc.
+            const caminhoCodificado = encodeURI(caminho);
+            const url = `monitorapp://${caminhoCodificado}`;
+            console.log("A abrir pasta via protocolo customizado:", url);
+            // Tenta abrir com window.location.href
+            window.location.href = url;
         }
 
         async function carregarProjetos() {
@@ -153,18 +163,16 @@
                     } else {
                         caminhos.forEach(c => {
                             const caminhoEscapado = c.localizacao.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            // Escapar aspas no atributo data-caminho
+                            const dataCaminho = c.localizacao.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                             caminhosHtml += `
                                 <li class="list-group-item d-flex justify-content-between align-items-center small">
                                     <span class="text-break me-2">📁 ${c.localizacao}</span>
-                                    
-                                    <!-- AQUI ESTÃO OS BOTÕES: ABRIR, COPIAR E APAGAR -->
                                     <div class="text-nowrap d-flex gap-1">
-                                        <button class="btn btn-outline-info btn-sm py-0 px-2" onclick="abrirPasta('${caminhoEscapado}')" title="Abrir Caminho">📂 Abrir</button>
+                                        <button class="btn btn-outline-info btn-sm py-0 px-2" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}" title="Abrir Caminho">📂 Abrir</button>
                                         <button class="btn btn-outline-primary btn-sm py-0 px-2" onclick="copiarCaminho('${caminhoEscapado}')" title="Copiar Caminho">📋 Copiar</button>
                                         <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="apagarCaminho(${c.id})" title="Remover caminho">❌</button>
                                     </div>
-                                    <!-- FIM DOS BOTÕES -->
-                                    
                                 </li>`;
                         });
                     }

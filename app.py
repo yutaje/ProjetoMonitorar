@@ -277,8 +277,7 @@ def executar_scan_caminho(caminho_obj):
 @app.route('/api/backups/download/<filename>', methods=['GET'])
 @jwt_required()
 def download_backup(filename):
-    # Substitui 'PASTA_DOS_TEUS_BACKUPS' pelo caminho real onde o sistema guarda os json dos backups. 
-    # Exemplo: pasta_backups = './backups' ou pasta_backups = 'C:/sistema/backups'
+    
     pasta_backups = 'backups_diarios' 
     
     try:
