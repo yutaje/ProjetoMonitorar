@@ -13,7 +13,6 @@
 </head>
 <body>
 
-    <!-- Barra de Navegação Direcional para o Utilizador -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
             <a class="navbar-brand" id="titulo-navbar" href="dashboard.html">🖥️ Dashboard</a>
@@ -23,14 +22,14 @@
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Links de navegação úteis para o utilizador comum -->
+                <!-- Navbar Limpa sem Dropdown -->
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item"><a class="nav-link active" href="dashboard.html">📊 Visão Geral</a></li>
                     <li class="nav-item"><a class="nav-link" href="projetos.html">📁 Gestão de Projetos</a></li>
                     <li class="nav-item"><a class="nav-link" href="alertas.html">⚠️ Alertas</a></li>
+                    <li class="nav-item"><a class="nav-link" href="backups.html">💾 Backups</a></li>
                 </ul>
 
-                <!-- Ações à direita (Admin + Logout) -->
                 <div class="d-flex align-items-center gap-2">
                     <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none">⚙️ Painel Admin</a>
                     <button id="btn-logout" class="btn btn-danger btn-sm">Sair (Logout)</button>
@@ -39,7 +38,6 @@
         </div>
     </nav>
 
-    <!-- Conteúdo Principal (Apenas Informações e Métricas) -->
     <div class="container pb-5">
         <div class="row mb-4">
             <div class="col-12">
@@ -48,7 +46,6 @@
             </div>
         </div>
         
-        <!-- Cartões de Métricas Globais -->
         <div class="row mb-4">
             <div class="col-md-4">
                 <div class="card p-4 text-center mb-3">
@@ -70,7 +67,6 @@
             </div>
         </div>
 
-        <!-- Recursos da Máquina (CPU, RAM, Disco) -->
         <div class="row mb-3">
             <div class="col-12"><h4 class="text-secondary">⚙️ Recursos da Máquina (Servidor)</h4></div>
         </div>

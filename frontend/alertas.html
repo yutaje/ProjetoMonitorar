@@ -15,7 +15,6 @@
 </head>
 <body>
 
-    <!-- Navbar completa original -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
             <a class="navbar-brand" href="dashboard.html" id="titulo-navbar">🖥️ Dashboard</a>
@@ -25,10 +24,12 @@
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
+                <!-- Navbar Limpa sem Dropdown -->
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item"><a class="nav-link" href="dashboard.html">📊 Visão Geral</a></li>
                     <li class="nav-item"><a class="nav-link" href="projetos.html">📁 Gestão de Projetos</a></li>
                     <li class="nav-item"><a class="nav-link active" href="alertas.html">⚠️ Alertas</a></li>
+                    <li class="nav-item"><a class="nav-link" href="backups.html">💾 Backups</a></li>
                 </ul>
 
                 <div class="d-flex align-items-center gap-2">
@@ -47,10 +48,7 @@
             </div>
         </div>
 
-        <!-- As Duas Boxes de Escolha com Contadores Dinâmicos -->
         <div class="row justify-content-center g-4">
-            
-            <!-- Box 1: Alertas Pendentes -->
             <div class="col-md-5">
                 <div class="card card-menu p-4 bg-white text-center border-top border-danger border-4">
                     <div class="card-body">
@@ -64,7 +62,6 @@
                 </div>
             </div>
 
-            <!-- Box 2: Alertas Resolvidos / Histórico -->
             <div class="col-md-5">
                 <div class="card card-menu p-4 bg-white text-center border-top border-success border-4">
                     <div class="card-body">
@@ -77,7 +74,6 @@
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 
@@ -86,30 +82,25 @@
         const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('token') || localStorage.getItem('access_token');
         if (!token) { window.location.href = "login.html"; }
 
-        // Mostrar nome do user na navbar[cite: 2]
         const nomeUtilizador = localStorage.getItem('username');
         if (nomeUtilizador) {
             const tituloNavbar = document.getElementById('titulo-navbar');
             if (tituloNavbar) tituloNavbar.textContent = `🖥️ Dashboard (${nomeUtilizador})`;
         }
 
-        // Botão Logout[cite: 2]
         document.getElementById('btn-logout').addEventListener('click', function() {
             localStorage.clear();
             window.location.href = "login.html";
         });
 
-        // Mostrar botão admin se for admin[cite: 2]
         const userRole = localStorage.getItem('user_role');
         if (userRole === 'admin') {
             const btnAdmin = document.getElementById('btn-admin');
             if (btnAdmin) btnAdmin.classList.remove('d-none');
         }
 
-        // Função para ir buscar os totais e preencher as caixas automaticamente
         async function carregarContagensHub() {
             try {
-                // 1. Pedir alertas pendentes
                 const resPendentes = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
@@ -117,11 +108,8 @@
                     const dadosPendentes = await resPendentes.json();
                     const totalP = dadosPendentes.total_pendentes !== undefined ? dadosPendentes.total_pendentes : (dadosPendentes.alertas ? dadosPendentes.alertas.length : 0);
                     document.getElementById('texto-pendentes').innerHTML = `<span class="text-danger">${totalP}</span> Alerta(s) por resolver`;
-                } else {
-                    document.getElementById('texto-pendentes').textContent = "Erro ao carregar";
                 }
 
-                // 2. Pedir histórico de resolvidos
                 const resHistorico = await fetch('http://127.0.0.1:5000/api/alertas/historico', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
@@ -129,8 +117,6 @@
                     const dadosHistorico = await resHistorico.json();
                     const totalR = dadosHistorico.total_resolvidos !== undefined ? dadosHistorico.total_resolvidos : (dadosHistorico.alertas ? dadosHistorico.alertas.length : 0);
                     document.getElementById('texto-resolvidos').innerHTML = `<span class="text-success">${totalR}</span> Alerta(s) resolvido(s)`;
-                } else {
-                    document.getElementById('texto-resolvidos').textContent = "Erro ao carregar";
                 }
             } catch (e) {
                 console.error("Erro ao carregar contagens do hub:", e);

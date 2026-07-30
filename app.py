@@ -1,6 +1,6 @@
 from fileinput import filename
 import os
-from flask import Flask , jsonify, request
+from flask import Flask , jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -160,14 +160,19 @@ class Alerta(db.Model):
     estado_alerta = db.Column(db.String(50), default='Por resolver', nullable=False)
 
     def to_dict(self):
-        return{
+        # Ir buscar o nome do projeto e o caminho à base de dados usando os IDs
+        projeto = Projeto.query.get(self.projeto_id)
+        caminho = Caminho.query.get(self.caminho_id)
+        
+        return {
             'id': self.id,
             'projeto_id': self.projeto_id,
+            'nome_projeto': projeto.nome if projeto else "Projeto Desconhecido",
             'caminho_id': self.caminho_id,
+            'localizacao': caminho.localizacao if caminho else "Caminho apagado",
             'data_hora': str(self.data_hora),
             'tipo_erro': self.tipo_erro,
             'estado_alerta': self.estado_alerta
-
         }
 
 
@@ -267,6 +272,20 @@ def executar_scan_caminho(caminho_obj):
 
     db.session.commit()
     return estado_atual, total_ficheiros
+
+
+@app.route('/api/backups/download/<filename>', methods=['GET'])
+@jwt_required()
+def download_backup(filename):
+    # Substitui 'PASTA_DOS_TEUS_BACKUPS' pelo caminho real onde o sistema guarda os json dos backups. 
+    # Exemplo: pasta_backups = './backups' ou pasta_backups = 'C:/sistema/backups'
+    pasta_backups = 'backups_diarios' 
+    
+    try:
+        # as_attachment=True força o browser a fazer o download em vez de tentar abrir o JSON no ecrã
+        return send_from_directory(pasta_backups, filename, as_attachment=True)
+    except FileNotFoundError:
+        return {"sucesso": False, "erro": "Ficheiro não encontrado no servidor."}, 404
 
 
 @app.route('/api/admin/logs', methods=['GET'])
