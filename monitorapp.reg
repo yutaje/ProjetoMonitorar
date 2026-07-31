@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\monitorapp]
+@="URL:Monitor App Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\monitorapp\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\monitorapp\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\monitorapp\shell\open\command]
+@="\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -WindowStyle Hidden -Command \"$c=[char]92; $s=[string]$c; $url='%1'.Trim('`\"'''); $log='C:'+$s+'monitorapp.log'; Add-Content -Path $log -Value '--- Início ---'; Add-Content -Path $log -Value ('URL original: '+$url); $path=[System.Uri]::UnescapeDataString($url); $path=$path -replace '(?i)^monitorapp:',''; $path=$path -replace '/',$s; $path=$path -replace ($s+$s+'+'),$s; $path=$path.TrimStart($c); Add-Content -Path $log -Value ('Path base limpo: '+$path); if($path -match ('^([A-Za-z])[:'+$s+$s+']+(.*)')){ $path=$Matches[1]+':'+$s+$Matches[2]; Add-Content -Path $log -Value ('Reconstruido para Disco Local: '+$path); }else{ $path=$s+$s+$path; Add-Content -Path $log -Value ('Reconstruido para Caminho de Rede: '+$path); }; if(Test-Path $path){ Add-Content -Path $log -Value 'Caminho existe, a abrir...'; Invoke-Item -LiteralPath $path; }else{ Add-Content -Path $log -Value 'ERRO: Caminho não existe'; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show(('A pasta nao existe: '+$path), 'Erro de Caminho', 0, 16); }; Add-Content -Path $log -Value '--- Fim ---';\""

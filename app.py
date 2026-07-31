@@ -274,6 +274,17 @@ def executar_scan_caminho(caminho_obj):
     return estado_atual, total_ficheiros
 
 
+# Rota para descarregar o ficheiro .reg diretamente da raiz do projeto
+@app.route('/api/download/reg', methods=['GET'])
+def download_reg_file():
+    # app.root_path é a diretoria principal do teu projeto (PROJETOMONITORAR)
+    return send_from_directory(
+        directory=app.root_path, 
+        path='monitorapp.reg', 
+        as_attachment=True
+    )
+
+
 @app.route('/api/backups/download/<filename>', methods=['GET'])
 @jwt_required()
 def download_backup(filename):
