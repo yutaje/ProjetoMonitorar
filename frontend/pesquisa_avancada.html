@@ -182,7 +182,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('token') || localStorage.getItem('access_token');
+        const token = localStorage.getItem('meu_token_jwt');
         if (!token) window.location.href = "login.html";
 
         const nomeUtilizador = localStorage.getItem('username');
@@ -202,6 +202,15 @@
 
         let dadosEncontradosGlobal = [];
         let dadosFalhasGlobal = [];
+
+        // Mesma função exata do projetos.html que funciona a 100%
+        function abrirPastaDoBotao(botao) {
+            let caminho = botao.getAttribute('data-caminho');
+            if (!caminho) return;
+            caminho = caminho.replace(/\\/g, '/');
+            const caminhoCodificado = encodeURI(caminho);
+            window.location.href = `monitorapp://${caminhoCodificado}`;
+        }
 
         window.copiarCaminho = async function(caminho, btn) {
             try {
@@ -353,6 +362,7 @@
                     item.resultados.forEach(res => {
                         contagemTotalMatch++;
                         const caminhoEscapado = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
+                        const dataCaminho = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
                         
                         dadosEncontradosGlobal.push({
                             termo: item.termo_pesquisado,
@@ -371,7 +381,7 @@
                             colunaDetalhes = `<small>${res.caminho}</small>`;
                             botoesAcao = `
                                 <button class="btn btn-sm btn-outline-secondary me-1 text-nowrap" onclick="copiarCaminho('${caminhoEscapado}', this)">📋 Copiar</button>
-                                <a href="monitorapp://${res.caminho}" class="btn btn-sm btn-outline-info text-nowrap fw-bold">📂 Abrir</a>
+                                <button class="btn btn-sm btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>
                             `;
                         }
                         
@@ -438,11 +448,12 @@
                             dropdownResultados.innerHTML = `<span class="dropdown-item text-muted">Nenhum resultado.</span>`;
                         } else {
                             data.resultados.forEach(proj => {
+                                const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                                 dropdownResultados.innerHTML += `
-                                    <a class="dropdown-item border-bottom py-2" href="monitorapp://${proj.caminho}">
+                                    <div class="dropdown-item border-bottom py-2" style="cursor: pointer;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                         <div class="fw-bold text-primary">${proj.nome}</div>
                                         <small class="text-muted">${proj.caminho}</small>
-                                    </a>`;
+                                    </div>`;
                             });
                         }
                         dropdownResultados.style.display = 'block'; 
@@ -470,6 +481,7 @@
                     } else {
                         data.resultados.forEach(proj => {
                             const caminhoEscapado = proj.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                             listaModal.innerHTML += `
                                 <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
                                     <div>
@@ -477,8 +489,8 @@
                                         <small class="text-muted text-break">${proj.caminho}</small>
                                     </div>
                                     <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminho('${caminhoEscapado}', this)">📋 Copiar</button>
-                                        <a class="btn btn-outline-info text-nowrap fw-bold" href="monitorapp://${proj.caminho}">📂 Abrir</a>
+                                        <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminhoModal('${caminhoEscapado}', this)">📋 Copiar</button>
+                                        <button type="button" class="btn btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>
                                     </div>
                                 </div>`;
                         });
