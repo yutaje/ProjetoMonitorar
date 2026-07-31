@@ -16,25 +16,37 @@
 <body>
 
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="dashboard.html" id="titulo-navbar">🖥️ Dashboard</a>
+        <div class="container-fluid px-4">
+            <a class="navbar-brand text-nowrap" id="titulo-navbar" href="dashboard.html">🖥️ Dashboard</a>
             
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Navbar Limpa sem Dropdown -->
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="dashboard.html">📊 Visão Geral</a></li>
-                    <li class="nav-item"><a class="nav-link" href="projetos.html">📁 Gestão de Projetos</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="alertas.html">⚠️ Alertas</a></li>
-                    <li class="nav-item"><a class="nav-link" href="backups.html">💾 Backups</a></li>
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-1">
+                    <li class="nav-item"><a class="nav-link text-nowrap" href="dashboard.html">📊 Visão Geral</a></li>
+                    <li class="nav-item"><a class="nav-link text-nowrap" href="projetos.html">📁 Gestão de Projetos</a></li>
+                    <li class="nav-item"><a class="nav-link active text-nowrap" href="alertas.html">⚠️ Alertas</a></li>
+                    <li class="nav-item"><a class="nav-link text-nowrap" href="backups.html">💾 Backups</a></li>
+                    <li class="nav-item"><a class="nav-link text-nowrap" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
                 </ul>
 
+                <!-- PESQUISA GLOBAL HÍBRIDA (LIVE + MODAL) -->
+                <form class="d-flex me-3 position-relative" id="formPesquisaGlobal" style="min-width: 250px;">
+                    <div class="input-group">
+                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto..." autocomplete="off">
+                        <button class="btn btn-light border" type="submit" id="btnPesquisa" title="Pesquisar (Enter)">🔍</button>
+                    </div>
+                    
+                    <!-- Caixa flutuante para os resultados em tempo real (Live) -->
+                    <div id="dropdownResultados" class="dropdown-menu w-100 shadow-lg" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 400px; overflow-y: auto;">
+                    </div>
+                </form>
+
                 <div class="d-flex align-items-center gap-2">
-                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none">⚙️ Painel Admin</a>
-                    <button id="btn-logout" class="btn btn-danger btn-sm">Sair (Logout)</button>
+                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
+                    <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
                 </div>
             </div>
         </div>
@@ -71,6 +83,23 @@
                         <a href="alertas_historico.html" class="btn btn-success w-100 fw-bold py-2 mt-3">
                             Ver Histórico
                         </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Resultados da Pesquisa Completa -->
+    <div class="modal fade" id="modalResultadosPesquisa" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">🔍 Resultados da Pesquisa</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="lista-resultados-pesquisa" class="list-group list-group-flush">
+                        <!-- Os resultados completos vão aparecer aqui -->
                     </div>
                 </div>
             </div>
@@ -124,6 +153,140 @@
         }
 
         carregarContagensHub();
+
+        // ==========================================
+        // LÓGICA DE PESQUISA (LIVE SEARCH + MODAL)
+        // ==========================================
+        
+        // Função nova para copiar o caminho diretamente do Modal
+        window.copiarCaminhoModal = async function(caminho, btn) {
+            try {
+                await navigator.clipboard.writeText(caminho);
+                const textoOriginal = btn.innerHTML;
+                
+                // Muda o aspeto do botão para dar feedback
+                btn.innerHTML = '✅ Copiado!';
+                btn.classList.replace('btn-outline-secondary', 'btn-success');
+                btn.classList.add('text-white');
+                
+                // Volta ao normal passado 2 segundos
+                setTimeout(() => {
+                    btn.innerHTML = textoOriginal;
+                    btn.classList.replace('btn-success', 'btn-outline-secondary');
+                    btn.classList.remove('text-white');
+                }, 2000);
+            } catch (err) {
+                console.error('Falha ao copiar: ', err);
+                alert('O teu browser bloqueou a cópia. Tenta dar permissões.');
+            }
+        };
+
+        const formPesquisa = document.getElementById('formPesquisaGlobal');
+        const inputPesquisa = document.getElementById('inputPesquisa');
+        const dropdownResultados = document.getElementById('dropdownResultados');
+        let timeoutPesquisa; 
+
+        if(inputPesquisa && formPesquisa) {
+            // 1. AÇÃO ENQUANTO ESCREVES (LIVE SEARCH)
+            inputPesquisa.addEventListener('input', function(e) {
+                let termo = this.value.trim();
+                
+                if (termo === "") {
+                    dropdownResultados.style.display = 'none';
+                    dropdownResultados.innerHTML = '';
+                    return;
+                }
+
+                clearTimeout(timeoutPesquisa);
+                timeoutPesquisa = setTimeout(() => {
+                    fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        dropdownResultados.innerHTML = ''; 
+                        if(data.total === 0) {
+                            dropdownResultados.innerHTML = `<span class="dropdown-item text-muted">Nenhum resultado para "${data.termo}".</span>`;
+                        } else {
+                            data.resultados.forEach(proj => {
+                                let item = `
+                                    <a class="dropdown-item border-bottom py-2" href="monitorapp://${proj.caminho}">
+                                        <div class="fw-bold text-primary">${proj.nome}</div>
+                                        <small class="text-muted text-wrap" style="font-size: 0.75rem;">${proj.caminho}</small>
+                                    </a>
+                                `;
+                                dropdownResultados.innerHTML += item;
+                            });
+                        }
+                        dropdownResultados.style.display = 'block'; 
+                    }).catch(err => console.error(err));
+                }, 300); 
+            });
+
+            // Esconder dropdown clicando fora
+            document.addEventListener('click', function(event) {
+                if (!formPesquisa.contains(event.target)) {
+                    dropdownResultados.style.display = 'none';
+                }
+            });
+
+            // Se voltar a clicar na barra
+            inputPesquisa.addEventListener('focus', function() {
+                if (this.value.trim() !== "" && dropdownResultados.innerHTML !== "") {
+                    dropdownResultados.style.display = 'block';
+                }
+            });
+
+            // 2. AÇÃO AO CARREGAR NO ENTER OU NA LUPA (MODAL)
+            formPesquisa.addEventListener('submit', function(e) {
+                e.preventDefault(); 
+                let termo = inputPesquisa.value.trim();
+                
+                if (termo === "") return;
+
+                dropdownResultados.style.display = 'none';
+
+                fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    const listaModal = document.getElementById('lista-resultados-pesquisa');
+                    listaModal.innerHTML = '';
+                    
+                    if(data.total === 0) {
+                        listaModal.innerHTML = `<div class="p-4 text-center text-muted fw-bold">Nenhum resultado encontrado para "${data.termo}".</div>`;
+                    } else {
+                        data.resultados.forEach(proj => {
+                            // Escapar as barras invertidas do Windows e plicas para não partir o JavaScript no 'onclick'
+                            const caminhoEscapado = proj.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            
+                            listaModal.innerHTML += `
+                                <div class="list-group-item p-3">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div>
+                                            <h5 class="mb-1 text-primary fw-bold">📁 ${proj.nome}</h5>
+                                            <small class="text-muted text-break">${proj.caminho}</small>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminhoModal('${caminhoEscapado}', this)">
+                                                📋 Copiar
+                                            </button>
+                                            <a class="btn btn-outline-info text-nowrap fw-bold" href="monitorapp://${proj.caminho}">
+                                                📂 Abrir
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                    const modalResultados = new bootstrap.Modal(document.getElementById('modalResultadosPesquisa'));
+                    modalResultados.show();
+                })
+                .catch(err => console.error("Erro na pesquisa do modal:", err));
+            });
+        }
     </script>
 </body>
 </html>

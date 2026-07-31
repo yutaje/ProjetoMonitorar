@@ -392,6 +392,107 @@ def pesquisa_projetos():
     }), 200
 
 
+# NOVA ROTA: Pesquisa Global Rápida
+@app.route('/api/pesquisa-global', methods=['GET'])
+@jwt_required()
+def pesquisa_global_rapida():
+    # Nota: tirei o .lower() daqui para a formatação da barra não se perder
+    termo = request.args.get('q', '').strip()
+    
+    if not termo:
+        return jsonify({"erro": "Termo de pesquisa vazio"}), 400
+
+    # A MAGIA ESTÁ AQUI: Escapar as barras para o MySQL não se perder!
+    # Se o user pesquisar por "C:\Projetos", transformamos em "C:\\Projetos"
+    termo_escapado = termo.replace('\\', '\\\\')
+
+    resultados = []
+    
+    # Pesquisar pelo nome no modelo Projeto ou pela localização no modelo Caminho
+    resultados_query = db.session.query(Projeto, Caminho)\
+        .join(Caminho, Caminho.projeto_id == Projeto.id)\
+        .filter(
+            (Projeto.nome.ilike(f"%{termo_escapado}%")) | 
+            (Caminho.localizacao.ilike(f"%{termo_escapado}%"))
+        ).all()
+
+    for projeto, caminho in resultados_query:
+        resultados.append({
+            "id_projeto": projeto.id,
+            "nome": projeto.nome,
+            "id_caminho": caminho.id,
+            "caminho": caminho.localizacao
+        })
+    
+    return jsonify({
+        "termo": termo,
+        "total": len(resultados),
+        "resultados": resultados
+    }), 200
+
+
+# NOVA ROTA: Pesquisa Avançada em Lote (Bulk Search)
+@app.route('/api/pesquisa-lote', methods=['POST'])
+@jwt_required()
+def pesquisa_lote():
+    dados = request.get_json()
+    linhas = dados.get('linhas', [])
+    modo = dados.get('modo', 'contem') # Espera receber 'contem' ou 'exato'
+
+    if not linhas:
+        return jsonify({"erro": "Nenhum termo fornecido para pesquisa."}), 400
+
+    encontrados = []
+    nao_encontrados = []
+
+    for linha in linhas:
+        # Limpar espaços vazios no início e fim
+        termo = linha.strip()
+        if not termo:
+            continue
+
+        resultados_query = []
+
+        if modo == 'exato':
+            # Procura exata (não precisa de escapar as barras, o '==' do SQLAlchemy trata os parâmetros com segurança)
+            resultados_query = db.session.query(Projeto, Caminho)\
+                .join(Caminho, Caminho.projeto_id == Projeto.id)\
+                .filter(
+                    (Projeto.nome == termo) | 
+                    (Caminho.localizacao == termo)
+                ).all()
+        else:
+            # Procura parcial ("contém") - precisa de escapar as barras do Windows para o operador LIKE (ilike)
+            termo_escapado = termo.replace('\\', '\\\\')
+            resultados_query = db.session.query(Projeto, Caminho)\
+                .join(Caminho, Caminho.projeto_id == Projeto.id)\
+                .filter(
+                    (Projeto.nome.ilike(f"%{termo_escapado}%")) | 
+                    (Caminho.localizacao.ilike(f"%{termo_escapado}%"))
+                ).all()
+
+        if resultados_query:
+            matches = []
+            for projeto, caminho in resultados_query:
+                matches.append({
+                    "id_projeto": projeto.id,
+                    "nome": projeto.nome,
+                    "id_caminho": caminho.id,
+                    "caminho": caminho.localizacao
+                })
+            encontrados.append({
+                "termo_pesquisado": termo,
+                "resultados": matches
+            })
+        else:
+            nao_encontrados.append(termo)
+
+    return jsonify({
+        "encontrados": encontrados,
+        "nao_encontrados": nao_encontrados
+    }), 200    
+
+
 #construir
 with app.app_context():
     db.create_all()
