@@ -69,17 +69,21 @@
                     <h6 class="fw-bold mb-3">Modo de Pesquisa</h6>
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="radio" name="modoPesquisa" id="modoContem" value="contem" checked>
-                        <label class="form-check-label" for="modoContem">
-                            <strong>Parcial (Contém)</strong><br>
-                            <small class="text-muted"></small>
-                        </label>
+                        <label class="form-check-label" for="modoContem"><strong>Parcial (Contém)</strong></label>
+                    </div>
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="radio" name="modoPesquisa" id="modoExato" value="exato">
+                        <label class="form-check-label" for="modoExato"><strong>Correspondência Exata</strong></label>
+                    </div>
+
+                    <h6 class="fw-bold mb-3 border-top pt-3">Origem dos Dados</h6>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="fontePesquisa" id="fonteBd" value="bd" checked>
+                        <label class="form-check-label" for="fonteBd">🗄️ Base de Dados (IRT)</label>
                     </div>
                     <div class="form-check">
-                        <input class="form-check-input" type="radio" name="modoPesquisa" id="modoExato" value="exato">
-                        <label class="form-check-label" for="modoExato">
-                            <strong>Correspondência Exata</strong><br>
-                            <small class="text-muted"></small>
-                        </label>
+                        <input class="form-check-input" type="radio" name="fontePesquisa" id="fonteBackups" value="backups">
+                        <label class="form-check-label" for="fonteBackups">💾 Ficheiros de Backup</label>
                     </div>
                 </div>
                 <button id="btn-iniciar-pesquisa" class="btn btn-primary btn-lg fw-bold w-100">
@@ -107,7 +111,6 @@
                 <!-- TAB ENCONTRADOS -->
                 <div class="tab-pane fade show active" id="encontrados" role="tabpanel">
                     
-                    <!-- NOVO: Header com botões de Cópia e Exportação -->
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <h6 class="m-0 text-muted">Resultados com correspondência:</h6>
                         <div class="d-flex gap-2">
@@ -125,8 +128,8 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>O que procuraste</th>
-                                    <th>Onde Encontrou (Nome do Projeto)</th>
-                                    <th>Caminho Registado</th>
+                                    <th>Nome do Projeto</th>
+                                    <th>Detalhes / Localização</th>
                                     <th class="text-end">Ações</th>
                                 </tr>
                             </thead>
@@ -140,10 +143,9 @@
                 <!-- TAB NÃO ENCONTRADOS -->
                 <div class="tab-pane fade" id="falhas" role="tabpanel">
                     
-                    <!-- NOVO: Header com botões de Cópia e Exportação e aviso -->
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <div class="alert alert-danger m-0 flex-grow-1 py-2">
-                            Estes nomes não tiveram qualquer correspondência na Base de Dados.
+                            Estes nomes não tiveram qualquer correspondência na fonte selecionada.
                         </div>
                         <div class="d-flex gap-2">
                             <button class="btn btn-sm btn-outline-secondary fw-bold text-nowrap shadow-sm" onclick="copiarListaFalhas(this)">
@@ -198,11 +200,9 @@
             window.location.href = "login.html";
         });
 
-        // Variáveis globais para guardar a pesquisa atual
         let dadosEncontradosGlobal = [];
         let dadosFalhasGlobal = [];
 
-        // Função Global de Cópia (para os botões individuais de cada linha)
         window.copiarCaminho = async function(caminho, btn) {
             try {
                 await navigator.clipboard.writeText(caminho);
@@ -218,10 +218,6 @@
             } catch (err) { alert('Falha ao copiar.'); }
         };
 
-        // ==========================================
-        // LÓGICA DE EXPORTAÇÃO E CÓPIA DE LISTAS
-        // ==========================================
-        
         function gerarDownloadFicheiro(conteudo, nomeFicheiro, tipoMime) {
             const bom = tipoMime.includes('csv') ? '\uFEFF' : '';
             const blob = new Blob([bom + conteudo], { type: tipoMime });
@@ -236,7 +232,6 @@
             document.body.removeChild(a);
         }
 
-        // ---- EXPORTAÇÃO (Ficheiros) ----
         window.exportarEncontrados = function() {
             if (dadosEncontradosGlobal.length === 0) {
                 alert("Não existem dados encontrados para exportar.");
@@ -264,13 +259,11 @@
             gerarDownloadFicheiro(txtConteudo, "pastas_nao_encontradas.txt", "text/plain;charset=utf-8;");
         };
 
-        // ---- CÓPIA DIRETA (Clipboard) ----
         window.copiarListaEncontrados = async function(btn) {
             if (dadosEncontradosGlobal.length === 0) {
                 alert("Não existem dados para copiar.");
                 return;
             }
-            // Formatar com Tabs (\t) para colar perfeitamente nas colunas do Excel
             let textoAreaTransferencia = "Termo Pesquisado\tNome do Projeto\tCaminho Registado\n";
             dadosEncontradosGlobal.forEach(item => {
                 textoAreaTransferencia += `${item.termo}\t${item.nome}\t${item.caminho}\n`;
@@ -295,7 +288,6 @@
                 alert("Não existem falhas para copiar.");
                 return;
             }
-            
             let textoAreaTransferencia = dadosFalhasGlobal.join('\n');
 
             try {
@@ -313,12 +305,13 @@
         };
 
         // ==========================================
-        // LÓGICA DA PESQUISA EM LOTE 
+        // LÓGICA DA PESQUISA EM LOTE
         // ==========================================
         document.getElementById('btn-iniciar-pesquisa').addEventListener('click', function() {
             const textarea = document.getElementById('texto-lote').value;
             const linhasBrutas = textarea.split('\n'); 
             const modo = document.querySelector('input[name="modoPesquisa"]:checked').value;
+            const fonte = document.querySelector('input[name="fontePesquisa"]:checked').value;
             const btn = this;
 
             const linhasLimpas = linhasBrutas.map(l => l.trim()).filter(l => l.length > 0);
@@ -337,7 +330,11 @@
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ linhas: linhasLimpas, modo: modo })
+                body: JSON.stringify({ 
+                    linhas: linhasLimpas, 
+                    modo: modo, 
+                    fonte: fonte 
+                })
             })
             .then(res => res.json())
             .then(data => {
@@ -347,7 +344,6 @@
                 tbEncontrados.innerHTML = '';
                 ulFalhas.innerHTML = '';
                 
-                // Reset as variáveis globais de exportação
                 dadosEncontradosGlobal = [];
                 dadosFalhasGlobal = [];
                 let contagemTotalMatch = 0;
@@ -356,23 +352,38 @@
                 data.encontrados.forEach(item => {
                     item.resultados.forEach(res => {
                         contagemTotalMatch++;
-                        const caminhoEscapado = res.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                        const caminhoEscapado = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
                         
-                        // Guardar para exportação / cópia global
                         dadosEncontradosGlobal.push({
                             termo: item.termo_pesquisado,
                             nome: res.nome,
-                            caminho: res.caminho
+                            caminho: res.caminho || ''
                         });
+
+                        let colunaDetalhes = '';
+                        let botoesAcao = '';
+
+                        if (fonte === 'backups') {
+                            const backupsList = res.backups && res.backups.length > 0 ? res.backups.join(', ') : 'Nenhum';
+                            colunaDetalhes = `<div class="text-success fw-bold">💾 Backups: ${backupsList}</div>`;
+                            botoesAcao = `<span class="text-muted small">-</span>`;
+                        } else {
+                            colunaDetalhes = `<small>${res.caminho}</small>`;
+                            botoesAcao = `
+                                <button class="btn btn-sm btn-outline-secondary me-1 text-nowrap" onclick="copiarCaminho('${caminhoEscapado}', this)">📋 Copiar</button>
+                                <a href="monitorapp://${res.caminho}" class="btn btn-sm btn-outline-info text-nowrap fw-bold">📂 Abrir</a>
+                            `;
+                        }
                         
                         let tr = `
                             <tr>
                                 <td class="fw-bold text-muted">${item.termo_pesquisado}</td>
                                 <td class="text-primary fw-bold">📁 ${res.nome}</td>
-                                <td class="text-break" style="max-width: 300px;"><small>${res.caminho}</small></td>
+                                <td class="text-break" style="max-width: 350px;">
+                                    ${colunaDetalhes}
+                                </td>
                                 <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-secondary me-1 text-nowrap" onclick="copiarCaminho('${caminhoEscapado}', this)">📋 Copiar</button>
-                                    <a href="monitorapp://${res.caminho}" class="btn btn-sm btn-outline-info text-nowrap">📂 Abrir</a>
+                                    ${botoesAcao}
                                 </td>
                             </tr>
                         `;
@@ -382,16 +393,13 @@
 
                 // 2. Processar os Falhados
                 data.nao_encontrados.forEach(termo => {
-                    // Guardar para exportação / cópia global
                     dadosFalhasGlobal.push(termo);
                     ulFalhas.innerHTML += `<li class="list-group-item text-danger fw-bold"><i class="bi bi-x-circle me-2"></i> ${termo}</li>`;
                 });
 
-                // Atualizar Contadores
                 document.getElementById('contagem-encontrados').textContent = contagemTotalMatch;
                 document.getElementById('contagem-falhas').textContent = data.nao_encontrados.length;
 
-                // Mostrar a Zona de Resultados e restaurar o botão
                 document.getElementById('zona-resultados').style.display = 'block';
                 btn.innerHTML = '<i class="bi bi-search"></i> Executar Pesquisa';
                 btn.disabled = false;
@@ -405,7 +413,7 @@
         });
 
         // ==========================================
-        // LÓGICA DA PESQUISA GLOBAL (NAVBAR - IGUAL ÀS OUTRAS)
+        // LÓGICA DA PESQUISA GLOBAL (NAVBAR)
         // ==========================================
         const formPesquisa = document.getElementById('formPesquisaGlobal');
         const inputPesquisa = document.getElementById('inputPesquisa');

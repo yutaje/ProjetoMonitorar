@@ -39,9 +39,6 @@
 
     <div class="container pb-5">
         <h2 class="mb-4">Ferramentas de Manutenção e Configuração</h2>
-        
-        <!-- Caixa de Alerta Dinâmica e Destacada -->
-        <div id="mensagem-alerta" class="alert d-none shadow-sm fw-bold mb-4" role="alert"></div>
 
         <!-- SECÇÃO DE FERRAMENTAS MANUAIS -->
         <div class="row mb-5">
@@ -101,16 +98,6 @@
             window.location.href = "dashboard.html";
         }
 
-        const msg = document.getElementById('mensagem-alerta');
-        
-        function mostrarMsg(texto, tipo = 'success') {
-            const icone = tipo === 'success' ? '✅' : '❌';
-            msg.innerHTML = `${icone} ${texto}`;
-            msg.className = `alert alert-${tipo} shadow-sm fw-bold mb-4`;
-            msg.classList.remove('d-none');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
         // 1. Carregar as configurações atuais ao abrir a página
         async function carregarConfiguracoes() {
             try {
@@ -153,24 +140,23 @@
                 const dados = await res.json();
 
                 if (res.ok) {
-                    mostrarMsg(dados.message || "Configurações atualizadas com sucesso!", 'success');
+                    alert(dados.message || "Configurações atualizadas com sucesso!");
                 } else {
-                    mostrarMsg(dados.error || "Erro ao atualizar configurações.", 'danger');
+                    alert(dados.error || "Erro ao atualizar configurações.");
                 }
             } catch (e) {
-                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+                alert("Erro de ligação ao servidor.");
             } finally {
                 btn.disabled = false;
                 btn.textContent = "💾 Guardar Configurações";
             }
         }
 
-        // Ação para o Scan Forçado
+        // Ação para o Scan Forçado (Silencioso sem banner no layout)
         document.getElementById('btn-scan').addEventListener('click', async () => {
             const btn = document.getElementById('btn-scan');
             btn.disabled = true; 
             btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A executar scan...`;
-            msg.classList.add('d-none');
 
             try {
                 const res = await fetch('http://127.0.0.1:5000/api/admin/forcar-scan', {
@@ -180,24 +166,23 @@
                 const dados = await res.json();
                 
                 if (res.ok) {
-                    mostrarMsg(dados.mensagem || "Varredura manual concluída com sucesso!", 'success');
+                    alert(dados.mensagem || "Varredura manual concluída com sucesso!");
                 } else {
-                    mostrarMsg(dados.erro || dados.error || "Erro ao executar o scan.", 'danger');
+                    alert(dados.erro || dados.error || "Erro ao executar o scan.");
                 }
             } catch (e) {
-                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+                alert("Erro de ligação ao servidor.");
             } finally {
                 btn.disabled = false; 
                 btn.textContent = "Executar Scan Agora";
             }
         });
 
-        // Ação para o Backup Manual
+        // Ação para o Backup Manual (Silencioso sem banner no layout)
         document.getElementById('btn-backup').addEventListener('click', async () => {
             const btn = document.getElementById('btn-backup');
             btn.disabled = true; 
             btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A gerar backup...`;
-            msg.classList.add('d-none');
 
             try {
                 const res = await fetch('http://127.0.0.1:5000/api/backups/gerar', {
@@ -207,12 +192,12 @@
                 const dados = await res.json();
                 
                 if (res.ok) {
-                    mostrarMsg(`${dados.mensagem} Ficheiro guardado com sucesso!`, 'success');
+                    alert(`${dados.mensagem} Ficheiro guardado com sucesso!`);
                 } else {
-                    mostrarMsg(dados.erro || dados.error || "Erro ao gerar o backup.", 'danger');
+                    alert(dados.erro || dados.error || "Erro ao gerar o backup.");
                 }
             } catch (e) {
-                mostrarMsg("Erro de ligação ao servidor.", 'danger');
+                alert("Erro de ligação ao servidor.");
             } finally {
                 btn.disabled = false; 
                 btn.textContent = "Criar Backup Agora";

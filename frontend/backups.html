@@ -9,6 +9,7 @@
         body { background-color: #f4f7f6; }
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .tree-node { border-left: 2px solid #dee2e6; margin-left: 10px; padding-left: 15px; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -86,19 +87,36 @@
         </div>
     </div>
 
-    <!-- Modal de Preview -->
+    <!-- Modal de Preview com Seletor Duplo (Árvore vs JSON) -->
     <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="previewModalLabel">Visualizar Backup</h5>
+                <div class="modal-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="modal-title m-0" id="previewModalLabel">Visualizar Backup</h5>
+                    
+                    <!-- Botões de Alternância de Vista -->
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-light fw-bold active" id="btnTabArvore" onclick="mudarVista('arvore')">🌲 Vista em Árvore</button>
+                        <button type="button" class="btn btn-outline-light fw-bold" id="btnTabJson" onclick="mudarVista('json')">💻 Código JSON</button>
+                    </div>
+
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body p-0">
-                    <pre id="preview-conteudo" class="p-3 m-0" style="background-color: #f8f9fa; font-size: 14px; border: none;"></pre>
+                
+                <div class="modal-body p-0 bg-light">
+                    <!-- Vista 1: Árvore Visual de Pastas -->
+                    <div id="vista-arvore" class="p-3" style="max-height: 75vh; overflow-y: auto;">
+                        <!-- Injetado via JS -->
+                    </div>
+
+                    <!-- Vista 2: Código JSON Cru -->
+                    <div id="vista-json" class="p-0" style="display: none; max-height: 75vh; overflow-y: auto;">
+                        <pre id="preview-conteudo" class="p-3 m-0" style="background-color: #f8f9fa; font-size: 14px; border: none;"></pre>
+                    </div>
                 </div>
+
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
                 </div>
             </div>
         </div>
@@ -129,7 +147,6 @@
             window.location.href = "login.html";
         }
 
-        // Mostra o user na navbar
         const nomeUtilizador = localStorage.getItem('username');
         if (nomeUtilizador) {
             const tituloNavbar = document.getElementById('titulo-navbar');
@@ -236,6 +253,70 @@
             renderizarLista(todosBackups);
         });
 
+        // Função para alternar entre a Vista em Árvore e o JSON Cru no Modal
+        function mudarVista(tipo) {
+            const elArvore = document.getElementById('vista-arvore');
+            const elJson = document.getElementById('vista-json');
+            const btnArvore = document.getElementById('btnTabArvore');
+            const btnJson = document.getElementById('btnTabJson');
+
+            if (tipo === 'arvore') {
+                elArvore.style.display = 'block';
+                elJson.style.display = 'none';
+                btnArvore.classList.add('active', 'btn-light');
+                btnArvore.classList.remove('btn-outline-light');
+                btnJson.classList.add('btn-outline-light');
+                btnJson.classList.remove('active', 'btn-light');
+            } else {
+                elArvore.style.display = 'none';
+                elJson.style.display = 'block';
+                btnJson.classList.add('active', 'btn-light');
+                btnJson.classList.remove('btn-outline-light');
+                btnArvore.classList.add('btn-outline-light');
+                btnArvore.classList.remove('active', 'btn-light');
+            }
+        }
+
+        // Função recursiva para desenhar a árvore de subpastas (idêntica à dos projetos)
+        function renderizarNoArvore(no) {
+            if (!no) return '';
+
+            let extsHtml = '';
+            if (no.extensoes && Object.keys(no.extensoes).length > 0) {
+                let chaves = Object.keys(no.extensoes);
+                chaves.sort((a, b) => no.extensoes[b] - no.extensoes[a]);
+                chaves.forEach(ext => {
+                    extsHtml += `<span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 0.75rem;"><code>${ext}</code>: ${no.extensoes[ext].toLocaleString()}</span>`;
+                });
+            } else {
+                extsHtml = `<span class="text-muted small">Sem ficheiros diretos nesta pasta.</span>`;
+            }
+
+            let subpastasHtml = '';
+            if (no.subpastas && no.subpastas.length > 0) {
+                no.subpastas.forEach(sub => {
+                    subpastasHtml += renderizarNoArvore(sub);
+                });
+            }
+
+            return `
+                <div class="card p-3 mb-2 bg-white shadow-sm border-start border-primary border-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <h6 class="mb-1 fw-bold text-primary">📁 ${no.nome}</h6>
+                            <small class="text-muted text-break">${no.caminho || ''}</small>
+                        </div>
+                        <span class="badge bg-primary fs-6">Total: ${(no.total_ficheiros || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="mt-2 pt-2 border-top">
+                        <div class="small fw-bold text-secondary mb-1">Extensões nesta pasta:</div>
+                        <div class="d-flex flex-wrap">${extsHtml}</div>
+                    </div>
+                    ${subpastasHtml ? `<div class="tree-node">${subpastasHtml}</div>` : ''}
+                </div>
+            `;
+        }
+
         async function visualizarBackup(nomeFicheiro) {
             mostrarMsg(`A abrir ${nomeFicheiro}...`, 'info');
             
@@ -249,15 +330,72 @@
 
                 const texto = await res.text();
                 let conteudoFormatado = texto;
+                let dadosJson = null;
                 
                 try {
-                    const jsonObj = JSON.parse(texto);
-                    conteudoFormatado = JSON.stringify(jsonObj, null, 4);
+                    dadosJson = JSON.parse(texto);
+                    conteudoFormatado = JSON.stringify(dadosJson, null, 4);
                 } catch(e) {
+                    console.error("Erro ao converter JSON:", e);
                 }
 
+                // Preencher a vista JSON cru
                 document.getElementById('previewModalLabel').textContent = `📄 ${nomeFicheiro}`;
                 document.getElementById('preview-conteudo').textContent = conteudoFormatado;
+
+                // Construir a vista em árvore com base nos dados guardados no backup
+                const containerArvore = document.getElementById('vista-arvore');
+                containerArvore.innerHTML = '';
+
+                if (dadosJson && dadosJson.projetos && dadosJson.caminhos) {
+                    if (dadosJson.projetos.length === 0) {
+                        containerArvore.innerHTML = `<div class="alert alert-warning m-3">Nenhum projeto registado neste backup.</div>`;
+                    } else {
+                        dadosJson.projetos.forEach(proj => {
+                            const caminhosDoProj = dadosJson.caminhos.filter(c => c.projeto_id === proj.id);
+                            
+                            let caminhosHtml = '';
+                            if (caminhosDoProj.length === 0) {
+                                caminhosHtml = `<p class="text-muted small">Sem caminhos associados a este projeto neste backup.</p>`;
+                            } else {
+                                caminhosDoProj.forEach(caminho => {
+                                    const arvoreDados = caminho.ultimo_historico ? caminho.ultimo_historico.extensoes_detalhe : null;
+                                    const totalGlobal = caminho.ultimo_historico ? caminho.ultimo_historico.total_ficheiros : 0;
+
+                                    if (arvoreDados && Object.keys(arvoreDados).length > 0) {
+                                        caminhosHtml += `
+                                            <div class="mb-3">
+                                                <div class="p-2 bg-secondary text-white rounded mb-2 d-flex justify-content-between align-items-center">
+                                                    <small class="text-break">📍 ${caminho.localizacao}</small>
+                                                    <span class="badge bg-light text-dark">Total: ${(totalGlobal).toLocaleString()}</span>
+                                                </div>
+                                                ${renderizarNoArvore(arvoreDados)}
+                                            </div>
+                                        `;
+                                    } else {
+                                        caminhosHtml += `
+                                            <div class="p-3 bg-white rounded mb-2 border">
+                                                <small class="text-break text-muted">📍 ${caminho.localizacao} (Sem histórico de scan registado neste backup)</small>
+                                            </div>
+                                        `;
+                                    }
+                                });
+                            }
+
+                            containerArvore.innerHTML += `
+                                <div class="card p-3 mb-3 bg-white shadow-sm border-top border-primary border-3">
+                                    <h4 class="text-primary mb-3">📂 Projeto: ${proj.nome}</h4>
+                                    ${caminhosHtml}
+                                </div>
+                            `;
+                        });
+                    }
+                } else {
+                    containerArvore.innerHTML = `<div class="alert alert-danger m-3">Estrutura de backup inválida ou antiga.</div>`;
+                }
+
+                // Por defeito, abrir sempre na vista de árvore
+                mudarVista('arvore');
 
                 document.getElementById('mensagem-alerta').classList.add('d-none');
                 const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));

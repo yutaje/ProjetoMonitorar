@@ -207,28 +207,87 @@ class ConfigSistema(db.Model):
         }
 
 
+def construir_arvore_pasta(caminho_dir):
+    nome = os.path.basename(caminho_dir) or caminho_dir
+    total_ficheiros = 0
+    extensoes_dict = {}
+    subpastas = []
+    
+    try:
+        if not os.path.exists(caminho_dir):
+            raise FileNotFoundError("A pasta não foi encontrada.")
+            
+        itens = os.listdir(caminho_dir)
+    except PermissionError:
+        return {
+            "nome": nome,
+            "caminho": caminho_dir,
+            "erro": "Permissão negada",
+            "total_ficheiros": 0,
+            "extensoes": {},
+            "subpastas": []
+        }
+    except Exception as e:
+        return {
+            "nome": nome,
+            "caminho": caminho_dir,
+            "erro": str(e),
+            "total_ficheiros": 0,
+            "extensoes": {},
+            "subpastas": []
+        }
+
+    for item in itens:
+        if item.startswith('.'):
+            continue
+
+        item_path = os.path.join(caminho_dir, item)
+        try:
+            if os.path.isdir(item_path):
+                # Chamada recursiva para as subpastas
+                sub_arvore = construir_arvore_pasta(item_path)
+                total_ficheiros += sub_arvore["total_ficheiros"]
+                
+                # Acumular extensões para o total geral desta pasta
+                for ext, count in sub_arvore["extensoes"].items():
+                    extensoes_dict[ext] = extensoes_dict.get(ext, 0) + count
+                    
+                subpastas.append(sub_arvore)
+            elif os.path.isfile(item_path):
+                total_ficheiros += 1
+                _, ext = os.path.splitext(item)
+                ext = ext.lower()
+                if ext:
+                    extensoes_dict[ext] = extensoes_dict.get(ext, 0) + 1
+        except Exception:
+            continue
+
+    return {
+        "nome": nome,
+        "caminho": caminho_dir,
+        "total_ficheiros": total_ficheiros,
+        "extensoes": extensoes_dict,
+        "subpastas": subpastas
+    }
+
+
 def executar_scan_caminho(caminho_obj):
     localizacao = caminho_obj.localizacao
     projeto_id = caminho_obj.projeto_id
     
-    total_ficheiros = 0
-    extensoes_dict = {}
     estado_atual = "OK"
     detalhes_msg = "A pasta existe e está acessível."
     tipo_erro_alerta = None
+    total_ficheiros = 0
+    arvore_completa = {}
 
     try:
         if not os.path.exists(localizacao):
             raise FileNotFoundError("A pasta não foi encontrada ou o caminho é inválido.")
         
-        #percorre a pasta principal e todas as subpastas
-        for root, dirs, files in os.walk(localizacao):
-            for file in files:
-                total_ficheiros += 1
-                _, ext = os.path.splitext(file)
-                ext = ext.lower()
-                if ext:
-                    extensoes_dict[ext] = extensoes_dict.get(ext, 0) + 1
+        # Executa a construção da árvore hierárquica
+        arvore_completa = construir_arvore_pasta(localizacao)
+        total_ficheiros = arvore_completa["total_ficheiros"]
 
     except PermissionError:
         estado_atual = "ERRO"
@@ -247,20 +306,18 @@ def executar_scan_caminho(caminho_obj):
         detalhes_msg = f"Erro desconhecido: {str(e)}"
         tipo_erro_alerta = "Erro desconhecido"
 
-    # guarda no historico
+    # Guarda a árvore completa convertida em JSON na coluna extensoes_detalhe
     novo_historico = Historico(
         caminho_id=caminho_obj.id,
         estado=estado_atual,
         total_ficheiros=total_ficheiros,
-        extensoes_detalhe=json.dumps(extensoes_dict, ensure_ascii=False),
+        extensoes_detalhe=json.dumps(arvore_completa, ensure_ascii=False),
         detalhes=detalhes_msg
     )
     db.session.add(novo_historico)
 
-    # SE DER ERRO: Só cria um novo alerta se já não existir um "Por resolver" para este caminho!
     if estado_atual == "ERRO":
         alerta_existente = Alerta.query.filter_by(caminho_id=caminho_obj.id, estado_alerta='Por resolver').first()
-        
         if not alerta_existente:
             novo_alerta = Alerta(
                 projeto_id=projeto_id,
@@ -431,13 +488,13 @@ def pesquisa_global_rapida():
     }), 200
 
 
-# NOVA ROTA: Pesquisa Avançada em Lote (Bulk Search)
 @app.route('/api/pesquisa-lote', methods=['POST'])
 @jwt_required()
 def pesquisa_lote():
     dados = request.get_json()
     linhas = dados.get('linhas', [])
-    modo = dados.get('modo', 'contem') # Espera receber 'contem' ou 'exato'
+    modo = dados.get('modo', 'contem')
+    fonte = dados.get('fonte', 'bd')
 
     if not linhas:
         return jsonify({"erro": "Nenhum termo fornecido para pesquisa."}), 400
@@ -445,52 +502,115 @@ def pesquisa_lote():
     encontrados = []
     nao_encontrados = []
 
-    for linha in linhas:
-        # Limpar espaços vazios no início e fim
-        termo = linha.strip()
-        if not termo:
-            continue
+    # Carregar todos os backups disponíveis para cruzamento de dados
+    todos_os_backups = []
+    try:
+        if os.path.exists(PASTA_BACKUPS):
+            for f_name in os.listdir(PASTA_BACKUPS):
+                if f_name.endswith('.json'):
+                    caminho_f = os.path.join(PASTA_BACKUPS, f_name)
+                    with open(caminho_f, 'r', encoding='utf-8') as f_bk:
+                        dados_bk = json.load(f_bk)
+                        todos_os_backups.append((f_name, dados_bk))
+    except Exception:
+        pass
 
-        resultados_query = []
+    if fonte == 'backups':
+        for linha in linhas:
+            termo = linha.strip()
+            if not termo:
+                continue
 
-        if modo == 'exato':
-            # Procura exata (não precisa de escapar as barras, o '==' do SQLAlchemy trata os parâmetros com segurança)
-            resultados_query = db.session.query(Projeto, Caminho)\
-                .join(Caminho, Caminho.projeto_id == Projeto.id)\
-                .filter(
-                    (Projeto.nome == termo) | 
-                    (Caminho.localizacao == termo)
-                ).all()
-        else:
-            # Procura parcial ("contém") - precisa de escapar as barras do Windows para o operador LIKE (ilike)
-            termo_escapado = termo.replace('\\', '\\\\')
-            resultados_query = db.session.query(Projeto, Caminho)\
-                .join(Caminho, Caminho.projeto_id == Projeto.id)\
-                .filter(
-                    (Projeto.nome.ilike(f"%{termo_escapado}%")) | 
-                    (Caminho.localizacao.ilike(f"%{termo_escapado}%"))
-                ).all()
+            matches_por_termo = []
+            
+            for f_name, dados_bk in todos_os_backups:
+                projetos_bk = {p['id']: p['nome'] for p in dados_bk.get('projetos', [])}
+                for c in dados_bk.get('caminhos', []):
+                    localizacao = c.get('localizacao', '')
+                    proj_id = c.get('projeto_id')
+                    proj_nome = projetos_bk.get(proj_id, 'Desconhecido')
 
-        if resultados_query:
-            matches = []
-            for projeto, caminho in resultados_query:
-                matches.append({
-                    "id_projeto": projeto.id,
-                    "nome": projeto.nome,
-                    "id_caminho": caminho.id,
-                    "caminho": caminho.localizacao
+                    match = False
+                    if modo == 'exato':
+                        if termo.lower() == proj_nome.lower() or termo.lower() == localizacao.lower():
+                            match = True
+                    else:
+                        if termo.lower() in proj_nome.lower() or termo.lower() in localizacao.lower():
+                            match = True
+
+                    if match:
+                        # Verificar se este caminho já existe nos matches deste termo para acumular os backups
+                        encontrado_idx = next((i for i, m in enumerate(matches_por_termo) if m['caminho'].lower() == localizacao.lower()), None)
+                        if encontrado_idx is not None:
+                            if f_name not in matches_por_termo[encontrado_idx]['backups']:
+                                matches_por_termo[encontrado_idx]['backups'].append(f_name)
+                        else:
+                            matches_por_termo.append({
+                                "id_projeto": proj_id,
+                                "nome": proj_nome,
+                                "caminho": localizacao,
+                                "backups": [f_name]
+                            })
+
+            if matches_por_termo:
+                encontrados.append({
+                    "termo_pesquisado": termo,
+                    "resultados": matches_por_termo
                 })
-            encontrados.append({
-                "termo_pesquisado": termo,
-                "resultados": matches
-            })
-        else:
-            nao_encontrados.append(termo)
+            else:
+                nao_encontrados.append(termo)
+    else:
+        # Pesquisa na Base de Dados (MySQL)
+        for linha in linhas:
+            termo = linha.strip()
+            if not termo:
+                continue
+
+            termo_escapado = termo.replace('\\', '\\\\')
+            if modo == 'exato':
+                resultados_query = db.session.query(Projeto, Caminho)\
+                    .join(Caminho, Caminho.projeto_id == Projeto.id)\
+                    .filter((Projeto.nome == termo) | (Caminho.localizacao == termo)).all()
+            else:
+                resultados_query = db.session.query(Projeto, Caminho)\
+                    .join(Caminho, Caminho.projeto_id == Projeto.id)\
+                    .filter((Projeto.nome.ilike(f"%{termo_escapado}%")) | (Caminho.localizacao.ilike(f"%{termo_escapado}%"))).all()
+
+            if resultados_query:
+                matches = []
+                for projeto, caminho in resultados_query:
+                    # Descobrir em quais backups este projeto/caminho aparece
+                    backups_do_projeto = []
+                    for f_name, dados_bk in todos_os_backups:
+                        proj_bk_ids = {p['id']: p['nome'] for p in dados_bk.get('projetos', [])}
+                        encontrou_neste = False
+                        for c_bk in dados_bk.get('caminhos', []):
+                            loc_bk = c_bk.get('localizacao', '')
+                            p_id = c_bk.get('projeto_id')
+                            p_nome = proj_bk_ids.get(p_id, '')
+                            if (str(p_id) == str(projeto.id) or projeto.nome.lower() in p_nome.lower()) and (caminho.localizacao.lower() in loc_bk.lower()):
+                                encontrou_neste = True
+                                break
+                        if encontrou_neste:
+                            backups_do_projeto.append(f_name)
+
+                    matches.append({
+                        "id_projeto": projeto.id,
+                        "nome": projeto.nome,
+                        "caminho": caminho.localizacao,
+                        "backups": backups_do_projeto
+                    })
+                encontrados.append({
+                    "termo_pesquisado": termo,
+                    "resultados": matches
+                })
+            else:
+                nao_encontrados.append(termo)
 
     return jsonify({
         "encontrados": encontrados,
         "nao_encontrados": nao_encontrados
-    }), 200    
+    }), 2000    
 
 
 #construir
@@ -1020,9 +1140,20 @@ def criar_backup_manual():
         caminhos = Caminho.query.all()
         projetos = Projeto.query.all()
 
+        # Enriquecer os caminhos com o último histórico (incluindo a árvore hierárquica)
+        caminhos_com_historico = []
+        for c in caminhos:
+            c_dict = c.to_dict()
+            ultimo_hist = Historico.query.filter_by(caminho_id=c.id).order_by(Historico.data_verificacao.desc()).first()
+            if ultimo_hist:
+                c_dict['ultimo_historico'] = ultimo_hist.to_dict()
+            else:
+                c_dict['ultimo_historico'] = None
+            caminhos_com_historico.append(c_dict)
+
         dados_para_guardar = {
             "data_backup": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "caminhos": [c.to_dict() for c in caminhos],
+            "caminhos": caminhos_com_historico,
             "projetos": [p.to_dict() for p in projetos]
         }
 
@@ -1038,7 +1169,7 @@ def criar_backup_manual():
         registar_log(
             user_id=user_id,
             acao="GERAR_BACKUP",
-            detalhes=f"Gerou manualmente o ficheiro de backup '{nome_ficheiro}'."
+            detalhes=f"Gerou manualmente o ficheiro de backup completo '{nome_ficheiro}'."
         )
 
         return jsonify({
@@ -1083,20 +1214,28 @@ def forcar_scan():
 
 #func que o robo vai executar solo
 def gerar_backup_automatico():
-    #key para aceder a bd
     with app.app_context():
         caminhos = Caminho.query.all()
         projetos = Projeto.query.all()
 
+        caminhos_com_historico = []
+        for c in caminhos:
+            c_dict = c.to_dict()
+            ultimo_hist = Historico.query.filter_by(caminho_id=c.id).order_by(Historico.data_verificacao.desc()).first()
+            if ultimo_hist:
+                c_dict['ultimo_historico'] = ultimo_hist.to_dict()
+            else:
+                c_dict['ultimo_historico'] = None
+            caminhos_com_historico.append(c_dict)
+
         dados = {
             "data_backup": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "caminhos": [c.to_dict() for c in caminhos],
+            "caminhos": caminhos_com_historico,
             "projetos": [p.to_dict() for p in projetos]
         }
 
-        #gera nome do ficheiro com timestamp
         data_str = datetime.now().strftime("%Y_%m_%d-%Hh%M")
-        nome_ficheiro = f"backup_auto_{data_str}.json" # Adicionei 'auto' para distinguir
+        nome_ficheiro = f"backup_auto_{data_str}.json"
         caminho_completo = os.path.join(PASTA_BACKUPS, nome_ficheiro)
 
         with open(caminho_completo, 'w', encoding='utf-8') as f:

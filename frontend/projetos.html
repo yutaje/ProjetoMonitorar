@@ -9,6 +9,7 @@
         body { background-color: #f4f7f6; }
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .tree-node { border-left: 2px solid #dee2e6; margin-left: 10px; padding-left: 15px; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -89,15 +90,15 @@
         </div>
     </div>
 
-    <!-- MODAL DE ESTATÍSTICAS DE FICHEIROS -->
+    <!-- MODAL DE ESTATÍSTICAS E ÁRVORE DE FICHEIROS -->
     <div class="modal fade" id="modalEstatisticasFicheiros" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="tituloModalStats">📊 Estatísticas de Ficheiros</h5>
+                    <h5 class="modal-title" id="tituloModalStats">📊 Árvore e Estatísticas de Ficheiros</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" id="corpoModalStats">
+                <div class="modal-body bg-light" id="corpoModalStats">
                     A carregar dados...
                 </div>
                 <div class="modal-footer">
@@ -182,20 +183,61 @@
             window.location.href = url;
         }
 
-        // Função para abrir o modal de estatísticas de ficheiros de um projeto específico
+        // Função recursiva em JavaScript para desenhar a árvore de pastas e extensões
+        function renderizarNoArvore(no) {
+            if (!no) return '';
+
+            // Desenhar badges de extensões desta pasta específica
+            let extsHtml = '';
+            if (no.extensoes && Object.keys(no.extensoes).length > 0) {
+                let chaves = Object.keys(no.extensoes);
+                chaves.sort((a, b) => no.extensoes[b] - no.extensoes[a]);
+                chaves.forEach(ext => {
+                    extsHtml += `<span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 0.75rem;"><code>${ext}</code>: ${no.extensoes[ext].toLocaleString()}</span>`;
+                });
+            } else {
+                extsHtml = `<span class="text-muted small">Sem ficheiros diretos nesta pasta.</span>`;
+            }
+
+            // Processar subpastas recursivamente
+            let subpastasHtml = '';
+            if (no.subpastas && no.subpastas.length > 0) {
+                no.subpastas.forEach(sub => {
+                    subpastasHtml += renderizarNoArvore(sub);
+                });
+            }
+
+            return `
+                <div class="card p-3 mb-2 bg-white shadow-sm border-start border-primary border-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <h6 class="mb-1 fw-bold text-primary">📁 ${no.nome}</h6>
+                            <small class="text-muted text-break">${no.caminho || ''}</small>
+                        </div>
+                        <span class="badge bg-primary fs-6">Total: ${(no.total_ficheiros || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="mt-2 pt-2 border-top">
+                        <div class="small fw-bold text-secondary mb-1">Extensões nesta pasta:</div>
+                        <div class="d-flex flex-wrap">${extsHtml}</div>
+                    </div>
+                    ${subpastasHtml ? `<div class="tree-node">${subpastasHtml}</div>` : ''}
+                </div>
+            `;
+        }
+
+        // Função para abrir o modal de árvore de ficheiros de um projeto
         async function abrirEstatisticasProjeto(projetoId, nomeProjeto) {
             const modalEl = document.getElementById('modalEstatisticasFicheiros');
             const corpoModal = document.getElementById('corpoModalStats');
             const tituloModal = document.getElementById('tituloModalStats');
             
-            tituloModal.textContent = `📊 Ficheiros: ${nomeProjeto}`;
-            corpoModal.innerHTML = `<div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">A calcular dados da pasta...</p></div>`;
+            tituloModal.textContent = `📊 Árvore de Ficheiros: ${nomeProjeto}`;
+            corpoModal.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">A carregar estrutura em árvore...</p></div>`;
             
             const meuModal = new bootstrap.Modal(modalEl);
             meuModal.show();
 
             try {
-                // Utiliza a rota de pesquisa do projeto existente no backend que retorna o total e extensões
                 const res = await fetch(`http://127.0.0.1:5000/api/projetos/pesquisa?termo=${encodeURIComponent(nomeProjeto)}&modo=historico`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -206,41 +248,25 @@
                 const projEncontrado = dados.resultados.find(p => p.projeto_id === projetoId);
 
                 if (!projEncontrado || !projEncontrado.caminhos || projEncontrado.caminhos.length === 0) {
-                    corpoModal.innerHTML = `<div class="alert alert-warning m-0">Nenhum caminho registado ou verificado para este projeto.</div>`;
+                    corpoModal.innerHTML = `<div class="alert alert-warning m-3">Nenhum caminho registado ou verificado para este projeto.</div>`;
                     return;
                 }
 
                 let htmlConteudo = '';
                 
                 projEncontrado.caminhos.forEach((caminho, index) => {
-                    let extensoesHtml = '';
-                    const extensoes = caminho.extensoes || {};
-                    const chavesExt = Object.keys(extensoes);
-
-                    if (chavesExt.length === 0) {
-                        extensoesHtml = `<li class="list-group-item text-muted small">Sem detalhes de extensões registados.</li>`;
-                    } else {
-                        // Ordenar extensões da maior quantidade para a menor
-                        chavesExt.sort((a, b) => extensoes[b] - extensoes[a]);
-                        chavesExt.forEach(ext => {
-                            extensoesHtml += `<li class="list-group-item d-flex justify-content-between align-items-center small py-1">
-                                <span><code class="fw-bold text-dark">${ext}</code></span>
-                                <span class="badge bg-secondary rounded-pill">${extensoes[ext].toLocaleString()}</span>
-                            </li>`;
-                        });
-                    }
-
+                    const arvoreDados = caminho.extensoes; // Contém o objeto hierárquico construído no backend
+                    
                     htmlConteudo += `
-                        <div class="mb-3 ${index > 0 ? 'border-top pt-3' : ''}">
-                            <div class="small fw-bold text-truncate text-secondary mb-1" title="${caminho.localizacao}">📁 ${caminho.localizacao}</div>
-                            <div class="p-2 bg-light rounded border mb-2 d-flex justify-content-between align-items-center">
-                                <span class="fw-bold text-dark">Total de Ficheiros:</span>
-                                <span class="badge bg-primary fs-6">${caminho.total_ficheiros.toLocaleString()}</span>
+                        <div class="mb-4">
+                            <div class="p-3 bg-secondary text-white rounded mb-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="m-0 fw-bold">📍 Diretório Principal:</h5>
+                                    <small class="text-light">${caminho.localizacao}</small>
+                                </div>
+                                <span class="badge bg-light text-dark fs-5">Total Global: ${(caminho.total_ficheiros || 0).toLocaleString()}</span>
                             </div>
-                            <div class="small fw-bold text-muted mb-1">Detalhe por Extensão:</div>
-                            <ul class="list-group list-group-flush border rounded" style="max-height: 150px; overflow-y: auto;">
-                                ${extensoesHtml}
-                            </ul>
+                            ${renderizarNoArvore(arvoreDados)}
                         </div>
                     `;
                 });
@@ -249,7 +275,7 @@
 
             } catch (err) {
                 console.error(err);
-                corpoModal.innerHTML = `<div class="alert alert-danger m-0">Erro ao carregar as estatísticas dos ficheiros.</div>`;
+                corpoModal.innerHTML = `<div class="alert alert-danger m-3">Erro ao carregar a árvore de ficheiros.</div>`;
             }
         }
 
@@ -304,7 +330,6 @@
                         botaoApagarProjeto = `<button class="btn btn-sm btn-outline-danger" onclick="apagarProjeto(${p.id}, '${p.nome}')">🗑️ Apagar Projeto</button>`;
                     }
 
-                    // Nome do projeto limpo para evitar erros de aspas no HTML
                     const nomeProjetoSeguro = p.nome.replace(/'/g, "\\'");
 
                     container.innerHTML += `
@@ -313,7 +338,7 @@
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h4 class="text-primary m-0">📂 ${p.nome}</h4>
                                     <div class="d-flex align-items-center gap-2">
-                                        <button class="btn btn-sm btn-outline-dark fw-bold text-nowrap py-1 px-2" onclick="abrirEstatisticasProjeto(${p.id}, '${nomeProjetoSeguro}')" title="Ver contagem e tipos de ficheiros">📊 Ficheiros</button>
+                                        <button class="btn btn-sm btn-outline-dark fw-bold text-nowrap py-1 px-2" onclick="abrirEstatisticasProjeto(${p.id}, '${nomeProjetoSeguro}')" title="Ver árvore e contagem de ficheiros">📊 Ficheiros</button>
                                         ${botaoApagarProjeto}
                                     </div>
                                 </div>
