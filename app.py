@@ -76,6 +76,25 @@ class Projeto(db.Model):
     }
 
 
+class ComputadorRede(db.Model):
+    __tablename__ = 'computador_rede'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome_pc = db.Column(db.String(150), nullable=False)
+    ip = db.Column(db.String(50), nullable=False)
+    utilizador_rede = db.Column(db.String(100), nullable=True)
+    password_rede = db.Column(db.String(200), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome_pc': self.nome_pc,
+            'ip': self.ip,
+            'utilizador_rede': self.utilizador_rede,
+            # Por segurança, podemos omitir a password no dicionário geral se não for estritamente necessário expô-la
+        }    
+
+
 class Caminho(db.Model):
     __tablename__ = 'caminho'
 
@@ -85,11 +104,14 @@ class Caminho(db.Model):
 
     projeto_id = db.Column(db.Integer, db.ForeignKey('projeto.id'), nullable=False)
 
+    data_ultima_atividade = db.Column(db.DateTime, nullable=True)
+
     def to_dict(self):
         return {
             'id': self.id,
             'localizacao': self.localizacao,
-            'projeto_id': self.projeto_id
+            'projeto_id': self.projeto_id,
+            'data_ultima_atividade': str(self.data_ultima_atividade) if self.data_ultima_atividade else None
         }
 
 
@@ -212,6 +234,7 @@ def construir_arvore_pasta(caminho_dir):
     total_ficheiros = 0
     extensoes_dict = {}
     subpastas = []
+    data_mais_recente = None
     
     is_rede = caminho_dir.startswith('\\\\')
     
@@ -228,7 +251,8 @@ def construir_arvore_pasta(caminho_dir):
             "erro": "Permissão negada",
             "total_ficheiros": 0,
             "extensoes": {},
-            "subpastas": []
+            "subpastas": [],
+            "data_mais_recente": None
         }
     except Exception as e:
         return {
@@ -237,7 +261,8 @@ def construir_arvore_pasta(caminho_dir):
             "erro": str(e),
             "total_ficheiros": 0,
             "extensoes": {},
-            "subpastas": []
+            "subpastas": [],
+            "data_mais_recente": None
         }
 
     for item in itens:
@@ -266,7 +291,8 @@ def construir_arvore_pasta(caminho_dir):
         "caminho": caminho_dir,
         "total_ficheiros": total_ficheiros,
         "extensoes": extensoes_dict,
-        "subpastas": subpastas
+        "subpastas": subpastas,
+        "data_mais_recente": data_mais_recente
     }
 
 
@@ -279,23 +305,21 @@ def executar_scan_caminho(caminho_obj):
     tipo_erro_alerta = None
     total_ficheiros = 0
     arvore_completa = {}
+    data_recente_encontrada = None # <--- NOVIDADE
 
-    # Identifica se é um caminho de rede (começa com \\)
     is_rede = localizacao.startswith('\\\\')
 
     try:
-        # Se for local, exigimos o os.path.exists estrito. 
-        # Se for rede, evitamos o bloqueio direto do os.path.exists para prevenir falsos positivos por timeout.
         if not is_rede and not os.path.exists(localizacao):
             raise FileNotFoundError("A pasta não foi encontrada ou o caminho é inválido.")
         
         arvore_completa = construir_arvore_pasta(localizacao)
         
-        # Se for rede e a função de árvore apanhou um erro por falha de ligação momentânea
         if is_rede and arvore_completa.get("erro"):
             raise OSError(arvore_completa["erro"])
 
         total_ficheiros = arvore_completa["total_ficheiros"]
+        data_recente_encontrada = arvore_completa.get("data_mais_recente") # <--- APANHA A DATA DA ÁRVORE
 
     except PermissionError:
         estado_atual = "ERRO"
@@ -307,7 +331,6 @@ def executar_scan_caminho(caminho_obj):
         tipo_erro_alerta = "Caminho não encontrado"
     except OSError as e:
         if is_rede:
-            # Para pastas de rede, tratamos como AVISO e NÃO geramos alerta crítico automático
             estado_atual = "AVISO"
             detalhes_msg = f"Partilha de rede temporariamente inacessível ou lenta: {str(e)}"
             tipo_erro_alerta = None 
@@ -320,6 +343,13 @@ def executar_scan_caminho(caminho_obj):
         detalhes_msg = f"Erro desconhecido: {str(e)}"
         tipo_erro_alerta = "Erro desconhecido"
 
+    # <--- INÍCIO DA ATUALIZAÇÃO DA BASE DE DADOS (NOVO) --->
+    if data_recente_encontrada:
+        # Só atualizamos se tivermos encontrado uma data mais recente do que a que já lá estava
+        if caminho_obj.data_ultima_atividade is None or data_recente_encontrada > caminho_obj.data_ultima_atividade:
+            caminho_obj.data_ultima_atividade = data_recente_encontrada
+    # <--- FIM DA ATUALIZAÇÃO DA BASE DE DADOS --->
+
     # Guarda o histórico na base de dados
     novo_historico = Historico(
         caminho_id=caminho_obj.id,
@@ -330,7 +360,6 @@ def executar_scan_caminho(caminho_obj):
     )
     db.session.add(novo_historico)
 
-    # Só cria alerta se for um ERRO real e não um AVISO de rede
     if estado_atual == "ERRO":
         alerta_existente = Alerta.query.filter_by(caminho_id=caminho_obj.id, estado_alerta='Por resolver').first()
         if not alerta_existente:
@@ -464,6 +493,71 @@ def pesquisa_projetos():
     }), 200
 
 
+# Rota para listar todos os PCs registados na rede
+@app.route('/api/computadores', methods=['GET'])
+@jwt_required()
+def listar_computadores_rede():
+    computadores = ComputadorRede.query.all()
+    return jsonify([pc.to_dict() for pc in computadores]), 200
+
+
+# Rota para registar um novo PC na rede
+@app.route('/api/computadores', methods=['POST'])
+@admin_required
+def criar_computador_rede():
+    dados = request.get_json()
+    nome_pc = dados.get('nome_pc', '').strip()
+    ip = dados.get('ip', '').strip()
+    utilizador_rede = dados.get('utilizador_rede', '').strip()
+    password_rede = dados.get('password_rede', '').strip()
+
+    if not nome_pc or not ip:
+        return jsonify({"erro": "O nome do PC e o endereço IP são obrigatórios!"}), 400
+
+    novo_pc = ComputadorRede(
+        nome_pc=nome_pc,
+        ip=ip,
+        utilizador_rede=utilizador_rede,
+        password_rede=password_rede
+    )
+
+    db.session.add(novo_pc)
+    db.session.commit()
+
+    # Registar log da ação
+    user_id = int(get_jwt_identity())
+    registar_log(
+        user_id=user_id,
+        acao="CRIAR_COMPUTADOR_REDE",
+        detalhes=f" Registou o PC '{nome_pc}' (IP: {ip}) no inventário de rede."
+    )
+
+    return jsonify({
+        "mensagem": "Computador registado com sucesso!",
+        "computador": novo_pc.to_dict()
+    }), 201
+
+
+# Rota para apagar um PC do inventário
+@app.route('/api/computadores/<int:id_pc>', methods=['DELETE'])
+@admin_required
+def apagar_computador_rede(id_pc):
+    pc = ComputadorRede.query.get_or_404(id_pc)
+    nome_pc = pc.nome_pc
+
+    db.session.delete(pc)
+    db.session.commit()
+
+    user_id = int(get_jwt_identity())
+    registar_log(
+        user_id=user_id,
+        acao="APAGAR_COMPUTADOR_REDE",
+        detalhes=f"Removeu o PC '{nome_pc}' do inventário de rede."
+    )
+
+    return jsonify({"mensagem": f"Computador '{nome_pc}' removido com sucesso!"}), 200
+
+
 def procurar_em_subpastas(no_subpasta, termo_lower, projeto_info, resultados_lista):
     if not no_subpasta or not isinstance(no_subpasta, dict):
         return
@@ -537,6 +631,7 @@ def pesquisa_lote():
     linhas = dados.get('linhas', [])
     modo = dados.get('modo', 'contem')
     fonte = dados.get('fonte', 'bd')
+    projetos_ids = dados.get('projetos_ids', []) # <--- NOVO: Lista de IDs selecionados (ex: [1, 3])
 
     if not linhas:
         return jsonify({"erro": "Nenhum termo fornecido para pesquisa."}), 400
@@ -544,7 +639,7 @@ def pesquisa_lote():
     encontrados = []
     nao_encontrados = []
 
-    # Carregar todos os backups disponíveis para cruzamento de dados
+    # (Carregamento de backups mantêm-se igual...)
     todos_os_backups = []
     try:
         if os.path.exists(PASTA_BACKUPS):
@@ -564,13 +659,16 @@ def pesquisa_lote():
                 continue
 
             matches_por_termo = []
-            
             for f_name, dados_bk in todos_os_backups:
                 projetos_bk = {p['id']: p['nome'] for p in dados_bk.get('projetos', [])}
                 for c in dados_bk.get('caminhos', []):
                     localizacao = c.get('localizacao', '')
                     proj_id = c.get('projeto_id')
                     proj_nome = projetos_bk.get(proj_id, 'Desconhecido')
+
+                    # Filtro opcional por projetos_ids vindos do frontend
+                    if projetos_ids and proj_id not in projetos_ids:
+                        continue
 
                     match = False
                     if modo == 'exato':
@@ -581,7 +679,6 @@ def pesquisa_lote():
                             match = True
 
                     if match:
-                        # Verificar se este caminho já existe nos matches deste termo para acumular os backups
                         encontrado_idx = next((i for i, m in enumerate(matches_por_termo) if m['caminho'].lower() == localizacao.lower()), None)
                         if encontrado_idx is not None:
                             if f_name not in matches_por_termo[encontrado_idx]['backups']:
@@ -595,33 +692,32 @@ def pesquisa_lote():
                             })
 
             if matches_por_termo:
-                encontrados.append({
-                    "termo_pesquisado": termo,
-                    "resultados": matches_por_termo
-                })
+                encontrados.append({"termo_pesquisado": termo, "resultados": matches_por_termo})
             else:
                 nao_encontrados.append(termo)
     else:
-        # Pesquisa na Base de Dados (MySQL)
+        # Pesquisa na Base de Dados com filtro opcional de projetos
         for linha in linhas:
             termo = linha.strip()
             if not termo:
                 continue
 
             termo_escapado = termo.replace('\\', '\\\\')
+            
+            query = db.session.query(Projeto, Caminho).join(Caminho, Caminho.projeto_id == Projeto.id)
+            
+            # Se o utilizador selecionou projetos específicos, aplicamos o filtro .in_()
+            if projetos_ids:
+                query = query.filter(Caminho.projeto_id.in_(projetos_ids))
+
             if modo == 'exato':
-                resultados_query = db.session.query(Projeto, Caminho)\
-                    .join(Caminho, Caminho.projeto_id == Projeto.id)\
-                    .filter((Projeto.nome == termo) | (Caminho.localizacao == termo)).all()
+                resultados_query = query.filter((Projeto.nome == termo) | (Caminho.localizacao == termo)).all()
             else:
-                resultados_query = db.session.query(Projeto, Caminho)\
-                    .join(Caminho, Caminho.projeto_id == Projeto.id)\
-                    .filter((Projeto.nome.ilike(f"%{termo_escapado}%")) | (Caminho.localizacao.ilike(f"%{termo_escapado}%"))).all()
+                resultados_query = query.filter((Projeto.nome.ilike(f"%{termo_escapado}%")) | (Caminho.localizacao.ilike(f"%{termo_escapado}%"))).all()
 
             if resultados_query:
                 matches = []
                 for projeto, caminho in resultados_query:
-                    # Descobrir em quais backups este projeto/caminho aparece
                     backups_do_projeto = []
                     for f_name, dados_bk in todos_os_backups:
                         proj_bk_ids = {p['id']: p['nome'] for p in dados_bk.get('projetos', [])}
@@ -642,10 +738,7 @@ def pesquisa_lote():
                         "caminho": caminho.localizacao,
                         "backups": backups_do_projeto
                     })
-                encontrados.append({
-                    "termo_pesquisado": termo,
-                    "resultados": matches
-                })
+                encontrados.append({"termo_pesquisado": termo, "resultados": matches})
             else:
                 nao_encontrados.append(termo)
 
@@ -1298,7 +1391,6 @@ def gerar_backup_automatico():
 #func que o robo vai executar para procurar falhas
 def gerar_scan_automatico():
     with app.app_context():
-        #vai buscar todos os caminhos a bd
         todos_caminhos = Caminho.query.all()
         
         print(f"[{datetime.now()}] Iniciando scan automático de rotina...")
@@ -1318,10 +1410,31 @@ def gerar_scan_automatico():
                         estado_alerta='Por resolver'
                     )
                     db.session.add(novo_alerta)
+                    
+            # O GATILHO DA INATIVIDADE
+            elif caminho.data_ultima_atividade: 
+                config = ConfigSistema.query.filter_by(chave='dias_limite_inatividade').first()
+                dias_limite = int(config.valor) if config else 4
+                
+                dias_inativo = (datetime.now() - caminho.data_ultima_atividade).days
+                
+                if dias_inativo >= dias_limite:
+                    alerta_inativo = Alerta.query.filter_by(
+                        caminho_id=caminho.id,
+                        estado_alerta='Por resolver'
+                    ).filter(Alerta.tipo_erro.like('Inatividade%')).first()
+                    
+                    if not alerta_inativo:
+                        novo_alerta_inativo = Alerta(
+                            projeto_id=caminho.projeto_id,
+                            caminho_id=caminho.id,
+                            tipo_erro=f"Inatividade: Sem alterações há {dias_inativo} dias",
+                            estado_alerta='Por resolver'
+                        )
+                        db.session.add(novo_alerta_inativo)
         
         db.session.commit()
         print(f"[{datetime.now()}] Scan automático concluído!")
-
 
 
 scheduler = BackgroundScheduler()
@@ -1332,7 +1445,6 @@ scheduler.add_job(func=gerar_backup_automatico, trigger="cron", hour=9, minute=1
 # backup da tarde
 scheduler.add_job(func=gerar_backup_automatico, trigger="cron", hour=17, minute=30)
 scheduler.start()
-
 
 scheduler.add_job(func=gerar_scan_automatico, trigger="interval", hours=2)
 

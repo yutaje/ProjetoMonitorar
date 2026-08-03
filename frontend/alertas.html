@@ -42,9 +42,23 @@
                     </div>
                 </form>
 
-                <div class="d-flex align-items-center gap-2">
-                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
-                    <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dropdown mt-1">
+                        <a href="#" id="dropdownNotificacoes" data-bs-toggle="dropdown" aria-expanded="false" class="position-relative text-decoration-none me-3" style="cursor: pointer;">
+                            <span class="fs-5">🔔</span>
+                            <span id="badge-notificacoes" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.65em;">
+                                0
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" aria-labelledby="dropdownNotificacoes" id="lista-notificacoes" style="width: 320px; max-height: 400px; overflow-y: auto;">
+                            <li class="dropdown-item text-center text-muted small py-3">A carregar notificações...</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2 border-start border-secondary ps-3">
+                        <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
+                        <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -289,6 +303,90 @@
                 .catch(err => console.error("Erro na pesquisa do modal:", err));
             });
         }
+
+        // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
+        async function resolverAlertaDoSino(idAlerta) {
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    atualizarSinoNotificacoes();
+                } else {
+                    alert("Erro ao marcar o alerta como resolvido.");
+                }
+            } catch (e) {
+                console.error("Erro ao resolver alerta:", e);
+            }
+        }
+
+        async function atualizarSinoNotificacoes() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const dados = await res.json();
+                    let alertasInatividade = [];
+
+                    if (dados.alertas) {
+                        alertasInatividade = dados.alertas.filter(a => 
+                            (a.tipo_erro && a.tipo_erro.toLowerCase().includes('inativ'))
+                        );
+                    }
+
+                    const badge = document.getElementById('badge-notificacoes');
+                    const listaMenu = document.getElementById('lista-notificacoes');
+                    
+                    if (badge && listaMenu) {
+                        const total = alertasInatividade.length;
+                        
+                        if (total > 0) {
+                            badge.textContent = total > 99 ? '99+' : total;
+                            badge.classList.remove('d-none');
+                            
+                            listaMenu.innerHTML = `<li class="dropdown-header fw-bold text-dark border-bottom mb-2 px-3">Notificações de Inatividade</li>`;
+                            
+                            alertasInatividade.forEach(alerta => {
+                                const dataCaminho = alerta.localizacao ? alerta.localizacao.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
+                                
+                                listaMenu.innerHTML += `
+                                    <li>
+                                        <div class="dropdown-item py-2 px-3" style="white-space: normal; cursor: default;">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <strong class="text-warning small">⚠️ ${alerta.nome_projeto || 'Aviso'}</strong>
+                                                <small class="text-muted" style="font-size: 0.7em;">${alerta.data_hora ? alerta.data_hora.split(' ')[0] : 'Recente'}</small>
+                                            </div>
+                                            <div class="small text-muted mb-1" style="font-size: 0.8em; line-height: 1.2;"><b>${alerta.tipo_erro}</b></div>
+                                            <div class="small text-secondary text-break mb-2" style="font-size: 0.75rem;">📍 ${alerta.localizacao || ''}</div>
+                                            
+                                            <div class="d-flex justify-content-end gap-1 border-top pt-2">
+                                                ${alerta.localizacao ? `<button class="btn btn-sm btn-outline-info py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>` : ''}
+                                                <button class="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="resolverAlertaDoSino(${alerta.id})">✅ Resolver</button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li><hr class="dropdown-divider m-0"></li>
+                                `;
+                            });
+                        } else {
+                            badge.classList.add('d-none');
+                            listaMenu.innerHTML = `
+                                <li><h6 class="dropdown-header text-center py-2">Notificações</h6></li>
+                                <li><div class="dropdown-item text-center text-muted small py-3">Sem pastas inativas de momento! 🎉</div></li>
+                            `;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Erro ao atualizar o sino:", e);
+            }
+        }
+
+        atualizarSinoNotificacoes();
+        setInterval(atualizarSinoNotificacoes, 10000);
     </script>
 </body>
 </html>

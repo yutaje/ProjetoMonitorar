@@ -26,6 +26,7 @@
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-1">
                     <li class="nav-item"><a class="nav-link text-nowrap" href="dashboard.html">📊 Visão Geral</a></li>
                     <li class="nav-item"><a class="nav-link active text-nowrap" href="projetos.html">📁 Gestão de Projetos</a></li>
+                    <li class="nav-item"><a class="nav-link text-nowrap" href="computadores.html">🖥️ PCs na Rede</a></li>
                     <li class="nav-item"><a class="nav-link text-nowrap" href="alertas.html">⚠️ Alertas</a></li>
                     <li class="nav-item"><a class="nav-link text-nowrap" href="backups.html">💾 Backups</a></li>
                     <li class="nav-item"><a class="nav-link text-nowrap" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
@@ -40,9 +41,23 @@
                     </div>
                 </form>
 
-                <div class="d-flex align-items-center gap-2">
-                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
-                    <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dropdown mt-1">
+                        <a href="#" id="dropdownNotificacoes" data-bs-toggle="dropdown" aria-expanded="false" class="position-relative text-decoration-none me-3" style="cursor: pointer;">
+                            <span class="fs-5">🔔</span>
+                            <span id="badge-notificacoes" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.65em;">
+                                0
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" aria-labelledby="dropdownNotificacoes" id="lista-notificacoes" style="width: 320px; max-height: 400px; overflow-y: auto;">
+                            <li class="dropdown-item text-center text-muted small py-3">A carregar notificações...</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2 border-start border-secondary ps-3">
+                        <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
+                        <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -52,7 +67,7 @@
         <div class="row mb-4 align-items-center">
             <div class="col-md-8">
                 <h2>📁 Gestão de Projetos e Caminhos</h2>
-                <p class="text-muted">Cria novos projetos, adiciona diretórios de pastas para monitorização em tempo real.</p>
+                <p class="text-muted">Cria novos projetos, seleciona PCs do inventário de rede ou insere caminhos locais.</p>
             </div>
             <div class="col-md-4 text-md-end">
                 <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#modalCriarProjeto">➕ Novo Projeto</button>
@@ -64,6 +79,7 @@
         <div id="lista-projetos-container" class="row g-4"></div>
     </div>
 
+    <!-- MODAL: Criar Novo Projeto -->
     <div class="modal fade" id="modalCriarProjeto" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -79,6 +95,37 @@
                         </div>
                         <div class="text-end">
                             <button type="submit" class="btn btn-success fw-bold">Criar Projeto</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Adicionar Caminho (PC Opcional / Local ou Rede) -->
+    <div class="modal fade" id="modalAdicionarCaminho" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">📂 Adicionar Caminho ao Projeto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-adicionar-caminho">
+                        <input type="hidden" id="caminho-projeto-id">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Selecionar PC de Destino (Opcional):</label>
+                            <select id="select-pc-rede" class="form-select" onchange="atualizarCaminhoSugerido()">
+                                <option value="">-- Caminho Local / Sem PC de Rede --</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Caminho / Partilha:</label>
+                            <input type="text" id="input-partilha-caminho" class="form-control" placeholder="Ex: C:\pastas\dados ou \partilha" autocomplete="off" required>
+                            <div class="form-text text-muted mt-2 fw-bold text-primary" id="preview-caminho-final">Caminho final: -</div>
+                        </div>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-success fw-bold px-4">Guardar Caminho</button>
                         </div>
                     </form>
                 </div>
@@ -120,7 +167,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const token = localStorage.getItem('meu_token_jwt');
+        const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('token') || localStorage.getItem('access_token');
         if (!token) {
             alert("Acesso negado! Tens de fazer login primeiro.");
             window.location.href = "login.html";
@@ -162,7 +209,6 @@
             }
         }
 
-        // Função corrigida para aceitar tanto caminhos locais como de rede sem bloqueios
         function abrirPastaDoBotao(botao) {
             let caminho = botao.getAttribute('data-caminho');
             if (!caminho) return;
@@ -205,7 +251,7 @@
                 <div class="card p-3 mb-2 bg-white shadow-sm border-start border-primary border-4">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
-                            <h6 class="mb-1 fw-bold text-primary">📁 ${no.nome}</h6>
+                            <h6 class="mb-1 fw-bold text-primary">📁 ${no.nome || 'Pasta'}</h6>
                             <small class="text-muted text-break">${no.caminho || ''}</small>
                         </div>
                         <span class="badge bg-primary fs-6">Total: ${(no.total_ficheiros || 0).toLocaleString()}</span>
@@ -231,37 +277,78 @@
             meuModal.show();
 
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/projetos/pesquisa?termo=${encodeURIComponent(nomeProjeto)}&modo=historico`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                let caminhosParaMostrar = [];
 
-                if (!res.ok) throw new Error("Erro ao obter dados");
+                try {
+                    const res = await fetch(`http://127.0.0.1:5000/api/projetos/pesquisa?termo=${encodeURIComponent(nomeProjeto)}&modo=historico`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const dados = await res.json();
+                        const projEncontrado = dados.resultados ? dados.resultados.find(p => p.projeto_id === projetoId) : null;
+                        if (projEncontrado && projEncontrado.caminhos) {
+                            caminhosParaMostrar = projEncontrado.caminhos;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Histórico não disponível, a recorrer aos caminhos diretos.", e);
+                }
 
-                const dados = await res.json();
-                const projEncontrado = dados.resultados.find(p => p.projeto_id === projetoId);
+                if (caminhosParaMostrar.length === 0) {
+                    const resCaminhos = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}/caminhos`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (resCaminhos.ok) {
+                        const caminhosBrutos = await resCaminhos.json();
+                        caminhosParaMostrar = caminhosBrutos.map(c => ({
+                            localizacao: c.localizacao,
+                            total_ficheiros: 0,
+                            extensoes: null,
+                            ultimo_historico: null
+                        }));
+                    }
+                }
 
-                if (!projEncontrado || !projEncontrado.caminhos || projEncontrado.caminhos.length === 0) {
-                    corpoModal.innerHTML = `<div class="alert alert-warning m-3">Nenhum caminho registado ou verificado para este projeto.</div>`;
+                if (caminhosParaMostrar.length === 0) {
+                    corpoModal.innerHTML = `<div class="alert alert-warning m-3">⚠️ Nenhum caminho registado para este projeto.</div>`;
                     return;
                 }
 
                 let htmlConteudo = '';
                 
-                projEncontrado.caminhos.forEach((caminho, index) => {
-                    const arvoreDados = caminho.extensoes; 
+                caminhosParaMostrar.forEach((caminho) => {
+                    const arvoreDados = caminho.extensoes || (caminho.ultimo_historico ? caminho.ultimo_historico.extensoes_detalhe : null);
+                    const totalGlobal = caminho.total_ficheiros !== undefined ? caminho.total_ficheiros : (caminho.ultimo_historico ? caminho.ultimo_historico.total_ficheiros : 0);
                     
-                    htmlConteudo += `
-                        <div class="mb-4">
-                            <div class="p-3 bg-secondary text-white rounded mb-3 d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h5 class="m-0 fw-bold">📍 Diretório Principal:</h5>
-                                    <small class="text-light">${caminho.localizacao}</small>
+                    if (!arvoreDados || Object.keys(arvoreDados).length === 0) {
+                        htmlConteudo += `
+                            <div class="mb-4">
+                                <div class="p-3 bg-secondary text-white rounded mb-3 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="m-0 fw-bold">📍 Diretório Principal:</h5>
+                                        <small class="text-light">${caminho.localizacao || 'Caminho desconhecido'}</small>
+                                    </div>
+                                    <span class="badge bg-light text-dark fs-5">Total Global: ${Number(totalGlobal).toLocaleString()}</span>
                                 </div>
-                                <span class="badge bg-light text-dark fs-5">Total Global: ${(caminho.total_ficheiros || 0).toLocaleString()}</span>
+                                <div class="alert alert-warning m-0">
+                                    ⚠️ Este diretório está registado, mas o robô central (scanner) ainda não efetuou o primeiro ciclo de leitura de ficheiros. Aguarda a próxima verificação automática.
+                                </div>
                             </div>
-                            ${renderizarNoArvore(arvoreDados)}
-                        </div>
-                    `;
+                        `;
+                    } else {
+                        htmlConteudo += `
+                            <div class="mb-4">
+                                <div class="p-3 bg-secondary text-white rounded mb-3 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="m-0 fw-bold">📍 Diretório Principal:</h5>
+                                        <small class="text-light">${caminho.localizacao}</small>
+                                    </div>
+                                    <span class="badge bg-light text-dark fs-5">Total Global: ${Number(totalGlobal).toLocaleString()}</span>
+                                </div>
+                                ${renderizarNoArvore(arvoreDados)}
+                            </div>
+                        `;
+                    }
                 });
 
                 corpoModal.innerHTML = htmlConteudo;
@@ -329,7 +416,7 @@
                         <div class="col-md-6">
                             <div class="card p-4 h-100 bg-white shadow-sm">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h4 class="text-primary m-0">📂 ${p.nome}</h4>
+                                    <h4 class="text-primary m-0">📁 ${p.nome}</h4>
                                     <div class="d-flex align-items-center gap-2">
                                         <button class="btn btn-sm btn-outline-dark fw-bold text-nowrap py-1 px-2" onclick="abrirEstatisticasProjeto(${p.id}, '${nomeProjetoSeguro}')" title="Ver árvore e contagem de ficheiros">📊 Ficheiros</button>
                                         ${botaoApagarProjeto}
@@ -338,7 +425,7 @@
                                 <hr class="text-muted my-2">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <span class="text-muted small fw-bold">Diretórios monitorizados:</span>
-                                    <button class="btn btn-sm btn-outline-success fw-bold" onclick="adicionarCaminho(${p.id})">➕ Adicionar Caminho</button>
+                                    <button class="btn btn-sm btn-outline-success fw-bold" onclick="abrirModalAdicionarCaminho(${p.id})">➕ Adicionar Caminho</button>
                                 </div>
                                 <ul class="list-group list-group-flush mb-2">
                                     ${caminhosHtml}
@@ -351,6 +438,83 @@
                 console.error("Erro ao carregar projetos:", e);
             }
         }
+
+        async function carregarPcsParaSelect() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/computadores', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const pcs = await res.json();
+                const select = document.getElementById('select-pc-rede');
+                select.innerHTML = '<option value="">-- Caminho Local / Sem PC de Rede --</option>';
+                
+                pcs.forEach(pc => {
+                    select.innerHTML += `<option value="${pc.ip}">🖥️ ${pc.nome_pc} (${pc.ip})</option>`;
+                });
+            } catch (e) {
+                console.error("Erro ao carregar PCs para o select:", e);
+            }
+        }
+
+        function abrirModalAdicionarCaminho(projetoId) {
+            document.getElementById('caminho-projeto-id').value = projetoId;
+            document.getElementById('form-adicionar-caminho').reset();
+            document.getElementById('preview-caminho-final').textContent = "Caminho final: -";
+            carregarPcsParaSelect();
+            new bootstrap.Modal(document.getElementById('modalAdicionarCaminho')).show();
+        }
+
+        function atualizarCaminhoSugerido() {
+            const select = document.getElementById('select-pc-rede');
+            const ipSelecionado = select.value;
+            const partilha = document.getElementById('input-partilha-caminho').value.trim();
+            
+            if (ipSelecionado && partilha) {
+                const caminhoFinal = `\\\\${ipSelecionado}\\${partilha.replace(/^[\/\\]+/, '')}`;
+                document.getElementById('preview-caminho-final').textContent = `Caminho final: ${caminhoFinal}`;
+            } else {
+                document.getElementById('preview-caminho-final').textContent = `Caminho final: ${partilha || '-'}`;
+            }
+        }
+
+        document.getElementById('input-partilha-caminho').addEventListener('input', atualizarCaminhoSugerido);
+
+        document.getElementById('form-adicionar-caminho').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const projetoId = document.getElementById('caminho-projeto-id').value;
+            const select = document.getElementById('select-pc-rede');
+            const ipSelecionado = select.value;
+            const partilha = document.getElementById('input-partilha-caminho').value.trim();
+
+            if (!partilha) {
+                alert("Indica o caminho ou partilha!");
+                return;
+            }
+
+            let localizacaoFinal = partilha;
+            if (ipSelecionado) {
+                localizacaoFinal = `\\\\${ipSelecionado}\\${partilha.replace(/^[\/\\]+/, '')}`;
+            }
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}/caminhos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ localizacao: localizacaoFinal })
+                });
+                const dados = await res.json();
+                if (res.ok) {
+                    bootstrap.Modal.getInstance(document.getElementById('modalAdicionarCaminho')).hide();
+                    mostrarMsg("Caminho associado com sucesso!", "success");
+                    carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao associar caminho.", "danger");
+                }
+            } catch (e) {
+                mostrarMsg("Erro de ligação ao servidor.", "danger");
+            }
+        });
 
         document.getElementById('form-novo-projeto').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -379,28 +543,6 @@
             }
         });
 
-        async function adicionarCaminho(projetoId) {
-            const localizacao = prompt("Indica o caminho completo da pasta a monitorizar:");
-            if (!localizacao || !localizacao.trim()) return;
-            try {
-                const res = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}/caminhos`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ localizacao: localizacao.trim() })
-                });
-                const dados = await res.json();
-                if (res.ok) {
-                    mostrarMsg("Caminho associado com sucesso!", "success");
-                    carregarProjetos();
-                } else {
-                    mostrarMsg(dados.erro || dados.error || "Erro ao associar caminho.", "danger");
-                }
-            } catch (e) {
-                mostrarMsg("Erro de ligação ao servidor.", "danger");
-            }
-        }
-
-        // Função de apagar o caminho com a apresentação correta do erro da base de dados/servidor
         async function apagarCaminho(caminhoId) {
             if (!confirm("Tens a certeza que pretendes remover este caminho?")) return;
             try {
@@ -510,7 +652,7 @@
             });
 
             formPesquisa.addEventListener('submit', function(e) {
-                e.preventDefault();
+                e.preventDefault(); 
                 let termo = inputPesquisa.value.trim();
                 
                 if (termo === "") return;
@@ -558,6 +700,90 @@
                 .catch(err => console.error("Erro na pesquisa do modal:", err));
             });
         }
+
+        // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
+        async function resolverAlertaDoSino(idAlerta) {
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    atualizarSinoNotificacoes();
+                } else {
+                    alert("Erro ao marcar o alerta como resolvido.");
+                }
+            } catch (e) {
+                console.error("Erro ao resolver alerta:", e);
+            }
+        }
+
+        async function atualizarSinoNotificacoes() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const dados = await res.json();
+                    let alertasInatividade = [];
+
+                    if (dados.alertas) {
+                        alertasInatividade = dados.alertas.filter(a => 
+                            (a.tipo_erro && a.tipo_erro.toLowerCase().includes('inativ'))
+                        );
+                    }
+
+                    const badge = document.getElementById('badge-notificacoes');
+                    const listaMenu = document.getElementById('lista-notificacoes');
+                    
+                    if (badge && listaMenu) {
+                        const total = alertasInatividade.length;
+                        
+                        if (total > 0) {
+                            badge.textContent = total > 99 ? '99+' : total;
+                            badge.classList.remove('d-none');
+                            
+                            listaMenu.innerHTML = `<li class="dropdown-header fw-bold text-dark border-bottom mb-2 px-3">Notificações de Inatividade</li>`;
+                            
+                            alertasInatividade.forEach(alerta => {
+                                const dataCaminho = alerta.localizacao ? alerta.localizacao.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
+                                
+                                listaMenu.innerHTML += `
+                                    <li>
+                                        <div class="dropdown-item py-2 px-3" style="white-space: normal; cursor: default;">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <strong class="text-warning small">⚠️ ${alerta.nome_projeto || 'Aviso'}</strong>
+                                                <small class="text-muted" style="font-size: 0.7em;">${alerta.data_hora ? alerta.data_hora.split(' ')[0] : 'Recente'}</small>
+                                            </div>
+                                            <div class="small text-muted mb-1" style="font-size: 0.8em; line-height: 1.2;"><b>${alerta.tipo_erro}</b></div>
+                                            <div class="small text-secondary text-break mb-2" style="font-size: 0.75rem;">📍 ${alerta.localizacao || ''}</div>
+                                            
+                                            <div class="d-flex justify-content-end gap-1 border-top pt-2">
+                                                ${alerta.localizacao ? `<button class="btn btn-sm btn-outline-info py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>` : ''}
+                                                <button class="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="resolverAlertaDoSino(${alerta.id})">✅ Resolver</button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li><hr class="dropdown-divider m-0"></li>
+                                `;
+                            });
+                        } else {
+                            badge.classList.add('d-none');
+                            listaMenu.innerHTML = `
+                                <li><h6 class="dropdown-header text-center py-2">Notificações</h6></li>
+                                <li><div class="dropdown-item text-center text-muted small py-3">Sem pastas inativas de momento! 🎉</div></li>
+                            `;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Erro ao atualizar o sino:", e);
+            }
+        }
+
+        atualizarSinoNotificacoes();
+        setInterval(atualizarSinoNotificacoes, 10000);
     </script>
 </body>
 </html>

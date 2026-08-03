@@ -40,9 +40,23 @@
                     </div>
                 </form>
 
-                <div class="d-flex align-items-center gap-2">
-                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
-                    <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dropdown mt-1">
+                        <a href="#" id="dropdownNotificacoes" data-bs-toggle="dropdown" aria-expanded="false" class="position-relative text-decoration-none me-3" style="cursor: pointer;">
+                            <span class="fs-5">🔔</span>
+                            <span id="badge-notificacoes" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.65em;">
+                                0
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" aria-labelledby="dropdownNotificacoes" id="lista-notificacoes" style="width: 320px; max-height: 400px; overflow-y: auto;">
+                            <li class="dropdown-item text-center text-muted small py-3">A carregar notificações...</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2 border-start border-secondary ps-3">
+                        <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
+                        <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -56,6 +70,7 @@
             </div>
         </div>
 
+        <!-- 1. BLOCO ORIGINAL: Pesquisa Global em Lote -->
         <div class="row bg-white p-4 rounded shadow-sm mb-5">
             <div class="col-md-8">
                 <label class="form-label fw-bold">Lista de Pastas / Projetos a procurar:</label>
@@ -85,11 +100,44 @@
                     </div>
                 </div>
                 <button id="btn-iniciar-pesquisa" class="btn btn-primary btn-lg fw-bold w-100">
-                    <i class="bi bi-search"></i> Executar Pesquisa
+                    <i class="bi bi-search"></i> Executar Pesquisa Global
                 </button>
             </div>
         </div>
 
+        <!-- 2. NOVO BLOCO: Pesquisa Avançada com Filtro de Projetos (Checkboxes) -->
+        <div class="row bg-white p-4 rounded shadow-sm mb-5 border-top border-primary border-4">
+            <div class="col-12 mb-3">
+                <h4 class="fw-bold text-primary">🎯 Pesquisa Avançada com Filtro de Projetos</h4>
+                <p class="text-muted small">Seleciona um ou vários projetos específicos para limitar a tua pesquisa em lote.</p>
+            </div>
+
+            <div class="col-md-5 border-end">
+                <label class="form-label fw-bold">1. Selecionar Projetos:</label>
+                <div class="mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="selecionarTodosProjetos(true)">☑️ Marcar Todos</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="selecionarTodosProjetos(false)">🔲 Desmarcar Todos</button>
+                </div>
+                <!-- Container dinâmico das checkboxes de projetos -->
+                <div id="lista-checkbox-projetos" class="border rounded p-3 bg-light" style="max-height: 220px; overflow-y: auto;">
+                    <span class="text-muted small">A carregar projetos...</span>
+                </div>
+            </div>
+
+            <div class="col-md-7 d-flex flex-column justify-content-between">
+                <div>
+                    <label class="form-label fw-bold">2. Lista de Pastas a Procurar:</label>
+                    <textarea id="texto-lote-filtrado" class="form-control font-monospace" rows="5" placeholder="Exemplo:&#10;Projeto_X&#10;C:\Dados\Relatorios"></textarea>
+                </div>
+                <div class="mt-3 text-end">
+                    <button id="btn-iniciar-pesquisa-filtrada" class="btn btn-success fw-bold px-4">
+                        <i class="bi bi-search"></i> Executar Pesquisa Filtrada
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ZONA DE RESULTADOS PARTILHADA -->
         <div id="zona-resultados" style="display: none;">
             <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -174,7 +222,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const token = localStorage.getItem('meu_token_jwt');
+        const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('token') || localStorage.getItem('access_token');
         if (!token) window.location.href = "login.html";
 
         const nomeUtilizador = localStorage.getItem('username');
@@ -194,6 +242,43 @@
 
         let dadosEncontradosGlobal = [];
         let dadosFalhasGlobal = [];
+
+        // Carregar projetos dinamicamente para as checkboxes da nova secção
+        async function carregarProjetosParaCheckboxes() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/projetos', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const projetos = await res.json();
+                const container = document.getElementById('lista-checkbox-projetos');
+                container.innerHTML = '';
+
+                if (projetos.length === 0) {
+                    container.innerHTML = `<span class="text-muted small">Nenhum projeto registado.</span>`;
+                    return;
+                }
+
+                projetos.forEach(p => {
+                    container.innerHTML += `
+                        <div class="form-check">
+                            <input class="form-check-input checkbox-projeto" type="checkbox" value="${p.id}" id="proj_${p.id}" checked>
+                            <label class="form-check-label small fw-bold" for="proj_${p.id}">
+                                📁 ${p.nome}
+                            </label>
+                        </div>
+                    `;
+                });
+            } catch (e) {
+                console.error("Erro ao carregar projetos para o filtro:", e);
+            }
+        }
+
+        function selecionarTodosProjetos(estado) {
+            document.querySelectorAll('.checkbox-projeto').forEach(cb => cb.checked = estado);
+        }
+
+        carregarProjetosParaCheckboxes();
 
         function abrirPastaDoBotao(botao) {
             let caminho = botao.getAttribute('data-caminho');
@@ -313,6 +398,71 @@
             } catch (err) { alert('Falha ao copiar para a área de transferência.'); }
         };
 
+        // Função partilhada para processar renderização dos resultados na tabela
+        function processarResultadosPesquisa(data, fonte, btn, textoBotaoOriginal) {
+            const tbEncontrados = document.getElementById('tabela-encontrados');
+            const ulFalhas = document.getElementById('lista-falhas');
+            
+            tbEncontrados.innerHTML = '';
+            ulFalhas.innerHTML = '';
+            
+            dadosEncontradosGlobal = [];
+            dadosFalhasGlobal = [];
+            let contagemTotalMatch = 0;
+
+            data.encontrados.forEach(item => {
+                item.resultados.forEach(res => {
+                    contagemTotalMatch++;
+                    const caminhoEscapado = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
+                    const dataCaminho = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
+                    
+                    dadosEncontradosGlobal.push({
+                        termo: item.termo_pesquisado,
+                        nome: res.nome,
+                        caminho: res.caminho || ''
+                    });
+
+                    let colunaDetalhes = '';
+                    let botoesAcao = '';
+
+                    if (fonte === 'backups') {
+                        const backupsList = res.backups && res.backups.length > 0 ? res.backups.join(', ') : 'Nenhum';
+                        colunaDetalhes = `<div class="text-success fw-bold">💾 Backups: ${backupsList}</div>`;
+                        botoesAcao = `<span class="text-muted small">-</span>`;
+                    } else {
+                        colunaDetalhes = `<small>${res.caminho}</small>`;
+                        botoesAcao = `
+                            <button class="btn btn-sm btn-outline-secondary me-1 text-nowrap" onclick="copiarCaminho('${caminhoEscapado}', this)">📋 Copiar</button>
+                            <button class="btn btn-sm btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>
+                        `;
+                    }
+                    
+                    tbEncontrados.innerHTML += `
+                        <tr>
+                            <td class="fw-bold text-muted">${item.termo_pesquisado}</td>
+                            <td class="text-primary fw-bold">📁 ${res.nome}</td>
+                            <td class="text-break" style="max-width: 350px;">${colunaDetalhes}</td>
+                            <td class="text-end">${botoesAcao}</td>
+                        </tr>
+                    `;
+                });
+            });
+
+            data.nao_encontrados.forEach(termo => {
+                dadosFalhasGlobal.push(termo);
+                ulFalhas.innerHTML += `<li class="list-group-item text-danger fw-bold"><i class="bi bi-x-circle me-2"></i> ${termo}</li>`;
+            });
+
+            document.getElementById('contagem-encontrados').textContent = contagemTotalMatch;
+            document.getElementById('contagem-falhas').textContent = data.nao_encontrados.length;
+
+            document.getElementById('zona-resultados').style.display = 'block';
+            btn.innerHTML = textoBotaoOriginal;
+            btn.disabled = false;
+            document.getElementById('zona-resultados').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Evento do Botão Original (Pesquisa Global)
         document.getElementById('btn-iniciar-pesquisa').addEventListener('click', function() {
             const textarea = document.getElementById('texto-lote').value;
             const linhasBrutas = textarea.split('\n'); 
@@ -343,76 +493,62 @@
                 })
             })
             .then(res => res.json())
-            .then(data => {
-                const tbEncontrados = document.getElementById('tabela-encontrados');
-                const ulFalhas = document.getElementById('lista-falhas');
-                
-                tbEncontrados.innerHTML = '';
-                ulFalhas.innerHTML = '';
-                
-                dadosEncontradosGlobal = [];
-                dadosFalhasGlobal = [];
-                let contagemTotalMatch = 0;
-
-                data.encontrados.forEach(item => {
-                    item.resultados.forEach(res => {
-                        contagemTotalMatch++;
-                        const caminhoEscapado = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
-                        const dataCaminho = res.caminho ? res.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
-                        
-                        dadosEncontradosGlobal.push({
-                            termo: item.termo_pesquisado,
-                            nome: res.nome,
-                            caminho: res.caminho || ''
-                        });
-
-                        let colunaDetalhes = '';
-                        let botoesAcao = '';
-
-                        if (fonte === 'backups') {
-                            const backupsList = res.backups && res.backups.length > 0 ? res.backups.join(', ') : 'Nenhum';
-                            colunaDetalhes = `<div class="text-success fw-bold">💾 Backups: ${backupsList}</div>`;
-                            botoesAcao = `<span class="text-muted small">-</span>`;
-                        } else {
-                            colunaDetalhes = `<small>${res.caminho}</small>`;
-                            botoesAcao = `
-                                <button class="btn btn-sm btn-outline-secondary me-1 text-nowrap" onclick="copiarCaminho('${caminhoEscapado}', this)">📋 Copiar</button>
-                                <button class="btn btn-sm btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>
-                            `;
-                        }
-                        
-                        let tr = `
-                            <tr>
-                                <td class="fw-bold text-muted">${item.termo_pesquisado}</td>
-                                <td class="text-primary fw-bold">📁 ${res.nome}</td>
-                                <td class="text-break" style="max-width: 350px;">
-                                    ${colunaDetalhes}
-                                </td>
-                                <td class="text-end">
-                                    ${botoesAcao}
-                                </td>
-                            </tr>
-                        `;
-                        tbEncontrados.innerHTML += tr;
-                    });
-                });
-
-                data.nao_encontrados.forEach(termo => {
-                    dadosFalhasGlobal.push(termo);
-                    ulFalhas.innerHTML += `<li class="list-group-item text-danger fw-bold"><i class="bi bi-x-circle me-2"></i> ${termo}</li>`;
-                });
-
-                document.getElementById('contagem-encontrados').textContent = contagemTotalMatch;
-                document.getElementById('contagem-falhas').textContent = data.nao_encontrados.length;
-
-                document.getElementById('zona-resultados').style.display = 'block';
-                btn.innerHTML = '<i class="bi bi-search"></i> Executar Pesquisa';
-                btn.disabled = false;
-            })
+            .then(data => processarResultadosPesquisa(data, fonte, btn, '<i class="bi bi-search"></i> Executar Pesquisa Global'))
             .catch(err => {
                 console.error(err);
                 alert("Ocorreu um erro a pesquisar.");
-                btn.innerHTML = '<i class="bi bi-search"></i> Executar Pesquisa';
+                btn.innerHTML = '<i class="bi bi-search"></i> Executar Pesquisa Global';
+                btn.disabled = false;
+            });
+        });
+
+        // Evento do Novo Botão (Pesquisa Filtrada por Checkboxes de Projeto)
+        document.getElementById('btn-iniciar-pesquisa-filtrada').addEventListener('click', function() {
+            const textarea = document.getElementById('texto-lote-filtrado').value;
+            const linhasBrutas = textarea.split('\n');
+            const linhasLimpas = linhasBrutas.map(l => l.trim()).filter(l => l.length > 0);
+
+            if (linhasLimpas.length === 0) {
+                alert("Por favor, insere pelo menos um termo para pesquisar.");
+                return;
+            }
+
+            const projetosIdsSelecionados = [];
+            document.querySelectorAll('.checkbox-projeto:checked').forEach(cb => {
+                projetosIdsSelecionados.push(parseInt(cb.value));
+            });
+
+            if (projetosIdsSelecionados.length === 0) {
+                alert("Seleciona pelo menos um projeto na lista de checkboxes.");
+                return;
+            }
+
+            const modo = document.querySelector('input[name="modoPesquisa"]:checked').value;
+            const fonte = document.querySelector('input[name="fontePesquisa"]:checked').value;
+            const btn = this;
+
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> A pesquisar...';
+            btn.disabled = true;
+
+            fetch('http://127.0.0.1:5000/api/pesquisa-lote', {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    linhas: linhasLimpas, 
+                    modo: modo, 
+                    fonte: fonte,
+                    projetos_ids: projetosIdsSelecionados 
+                })
+            })
+            .then(res => res.json())
+            .then(data => processarResultadosPesquisa(data, fonte, btn, '<i class="bi bi-search"></i> Executar Pesquisa Filtrada'))
+            .catch(err => {
+                console.error(err);
+                alert("Ocorreu um erro a pesquisar.");
+                btn.innerHTML = '<i class="bi bi-search"></i> Executar Pesquisa Filtrada';
                 btn.disabled = false;
             });
         });
@@ -491,6 +627,90 @@
                 });
             });
         }
+
+        // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
+        async function resolverAlertaDoSino(idAlerta) {
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    atualizarSinoNotificacoes();
+                } else {
+                    alert("Erro ao marcar o alerta como resolvido.");
+                }
+            } catch (e) {
+                console.error("Erro ao resolver alerta:", e);
+            }
+        }
+
+        async function atualizarSinoNotificacoes() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const dados = await res.json();
+                    let alertasInatividade = [];
+
+                    if (dados.alertas) {
+                        alertasInatividade = dados.alertas.filter(a => 
+                            (a.tipo_erro && a.tipo_erro.toLowerCase().includes('inativ'))
+                        );
+                    }
+
+                    const badge = document.getElementById('badge-notificacoes');
+                    const listaMenu = document.getElementById('lista-notificacoes');
+                    
+                    if (badge && listaMenu) {
+                        const total = alertasInatividade.length;
+                        
+                        if (total > 0) {
+                            badge.textContent = total > 99 ? '99+' : total;
+                            badge.classList.remove('d-none');
+                            
+                            listaMenu.innerHTML = `<li class="dropdown-header fw-bold text-dark border-bottom mb-2 px-3">Notificações de Inatividade</li>`;
+                            
+                            alertasInatividade.forEach(alerta => {
+                                const dataCaminho = alerta.localizacao ? alerta.localizacao.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
+                                
+                                listaMenu.innerHTML += `
+                                    <li>
+                                        <div class="dropdown-item py-2 px-3" style="white-space: normal; cursor: default;">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <strong class="text-warning small">⚠️ ${alerta.nome_projeto || 'Aviso'}</strong>
+                                                <small class="text-muted" style="font-size: 0.7em;">${alerta.data_hora ? alerta.data_hora.split(' ')[0] : 'Recente'}</small>
+                                            </div>
+                                            <div class="small text-muted mb-1" style="font-size: 0.8em; line-height: 1.2;"><b>${alerta.tipo_erro}</b></div>
+                                            <div class="small text-secondary text-break mb-2" style="font-size: 0.75rem;">📍 ${alerta.localizacao || ''}</div>
+                                            
+                                            <div class="d-flex justify-content-end gap-1 border-top pt-2">
+                                                ${alerta.localizacao ? `<button class="btn btn-sm btn-outline-info py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>` : ''}
+                                                <button class="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="resolverAlertaDoSino(${alerta.id})">✅ Resolver</button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li><hr class="dropdown-divider m-0"></li>
+                                `;
+                            });
+                        } else {
+                            badge.classList.add('d-none');
+                            listaMenu.innerHTML = `
+                                <li><h6 class="dropdown-header text-center py-2">Notificações</h6></li>
+                                <li><div class="dropdown-item text-center text-muted small py-3">Sem pastas inativas de momento! 🎉</div></li>
+                            `;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Erro ao atualizar o sino:", e);
+            }
+        }
+
+        atualizarSinoNotificacoes();
+        setInterval(atualizarSinoNotificacoes, 10000);
     </script>
 </body>
 </html>

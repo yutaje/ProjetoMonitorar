@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Backups - Monitor de Sistema</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
         body { background-color: #f4f7f6; }
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -41,9 +42,23 @@
                     </div>
                 </form>
 
-                <div class="d-flex align-items-center gap-2">
-                    <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
-                    <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dropdown mt-1">
+                        <a href="#" id="dropdownNotificacoes" data-bs-toggle="dropdown" aria-expanded="false" class="position-relative text-decoration-none me-3" style="cursor: pointer;">
+                            <span class="fs-5">🔔</span>
+                            <span id="badge-notificacoes" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.65em;">
+                                0
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" aria-labelledby="dropdownNotificacoes" id="lista-notificacoes" style="width: 320px; max-height: 400px; overflow-y: auto;">
+                            <li class="dropdown-item text-center text-muted small py-3">A carregar notificações...</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2 border-start border-secondary ps-3">
+                        <a href="admin.html" id="btn-admin" class="btn btn-warning btn-sm d-none text-nowrap">⚙️ Painel Admin</a>
+                        <button id="btn-logout" class="btn btn-danger btn-sm text-nowrap">Sair (Logout)</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -53,7 +68,7 @@
         <div class="row mb-4 align-items-center">
             <div class="col-md-7">
                 <h2>💾 Histórico de Backups</h2>
-                <p class="text-muted">Consulta e transfere os backups do sistema.</p>
+                <p class="text-muted">Consulta e transfere os backups do sistema com indicador rápido de erros.</p>
             </div>
             <div class="col-md-5 d-flex justify-content-md-end align-items-center gap-2 mt-3 mt-md-0">
                 <label for="filtro-data" class="fw-bold text-nowrap m-0">📅 Data:</label>
@@ -71,6 +86,7 @@
                         <thead class="table-dark">
                             <tr>
                                 <th class="px-4 py-3">Nome do Ficheiro</th>
+                                <th class="px-4 py-3">Estado / Erro Detetado</th>
                                 <th class="px-4 py-3 text-end">Ações</th>
                             </tr>
                         </thead>
@@ -82,6 +98,7 @@
         </div>
     </div>
 
+    <!-- MODAL DE PRÉ-VISUALIZAÇÃO CLEAN (AGRUPADO POR IP COM BOTÃO +) -->
     <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
@@ -89,7 +106,7 @@
                     <h5 class="modal-title m-0" id="previewModalLabel">Visualizar Backup</h5>
                     
                     <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-light fw-bold active" id="btnTabArvore" onclick="mudarVista('arvore')">🌲 Vista em Árvore</button>
+                        <button type="button" class="btn btn-light fw-bold active" id="btnTabArvore" onclick="mudarVista('arvore')">🌲 Vista Limpa por IP</button>
                         <button type="button" class="btn btn-outline-light fw-bold" id="btnTabJson" onclick="mudarVista('json')">💻 Código JSON</button>
                     </div>
 
@@ -129,7 +146,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const token = localStorage.getItem('meu_token_jwt');
+        const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('token') || localStorage.getItem('access_token');
         if (!token) {
             window.location.href = "login.html";
         }
@@ -180,7 +197,7 @@
 
         async function carregarBackups() {
             const container = document.getElementById('lista-backups-container');
-            container.innerHTML = '<tr><td colspan="2" class="text-center p-4">A carregar backups...</td></tr>';
+            container.innerHTML = '<tr><td colspan="3" class="text-center p-4">A carregar backups e a verificar erros...</td></tr>';
 
             try {
                 const res = await fetch('http://127.0.0.1:5000/api/backups', {
@@ -195,17 +212,31 @@
 
             } catch (e) {
                 console.error(e);
-                container.innerHTML = `<tr><td colspan="2" class="text-center p-4 text-danger">Erro de comunicação com o servidor.</td></tr>`;
+                container.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-danger">Erro de comunicação com o servidor.</td></tr>`;
             }
         }
 
-        function renderizarLista(lista) {
+        // Função auxiliar para detetar se há erros nos caminhos dentro do ficheiro de backup
+        function detetarErrosNoBackup(dadosJson) {
+            if (!dadosJson || !dadosJson.caminhos) return { temErro: false, mensagem: "OK" };
+            
+            for (let c of dadosJson.caminhos) {
+                if (c.ultimo_historico) {
+                    if (c.ultimo_historico.estado === "ERRO") {
+                        return { temErro: true, mensagem: c.ultimo_historico.detalhes || "Erro detetado no scan" };
+                    }
+                }
+            }
+            return { temErro: false, mensagem: "Sem erros detetados" };
+        }
+
+        async function renderizarLista(lista) {
             const container = document.getElementById('lista-backups-container');
             
             if (lista.length === 0) {
                 container.innerHTML = `
                     <tr>
-                        <td colspan="2" class="text-center p-4 text-muted fw-bold">
+                        <td colspan="3" class="text-center p-4 text-muted fw-bold">
                             🤷‍♂️ Nenhum backup encontrado.
                         </td>
                     </tr>`;
@@ -220,11 +251,34 @@
             });
 
             let html = '';
-            listaOrdenada.forEach(nomeFicheiro => {
+            
+            // Vamos iterar e verificar o conteúdo de cada backup de forma assíncrona para extrair erros rápidos
+            for (let nomeFicheiro of listaOrdenada) {
+                let badgeErroHtml = `<span class="badge bg-success">✅ OK</span>`;
+                
+                try {
+                    const res = await fetch(`http://127.0.0.1:5000/api/backups/download/${nomeFicheiro}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const texto = await res.text();
+                        const dadosJson = JSON.parse(texto);
+                        const analise = detetarErrosNoBackup(dadosJson);
+                        if (analise.temErro) {
+                            badgeErroHtml = `<span class="badge bg-danger text-wrap" style="max-width: 300px;" title="${analise.mensagem}">❌ ${analise.mensagem}</span>`;
+                        }
+                    }
+                } catch(err) {
+                    badgeErroHtml = `<span class="badge bg-secondary">⚠️ Estado Indefinido</span>`;
+                }
+
                 html += `
                     <tr>
                         <td class="px-4 py-3 fw-bold text-dark fs-6">
                             📄 ${nomeFicheiro}
+                        </td>
+                        <td class="px-4 py-3">
+                            ${badgeErroHtml}
                         </td>
                         <td class="px-4 py-3 text-end text-nowrap">
                             <button class="btn btn-sm btn-outline-secondary fw-bold me-2" onclick="visualizarBackup('${nomeFicheiro}')" title="Ver no browser">
@@ -236,7 +290,7 @@
                         </td>
                     </tr>
                 `;
-            });
+            }
 
             container.innerHTML = html;
         }
@@ -280,7 +334,8 @@
             }
         }
 
-        function renderizarNoArvore(no) {
+        // Função limpa para renderizar nós de diretórios dentro da expansão do IP
+        function renderizarNoArvoreClean(no) {
             if (!no) return '';
 
             let extsHtml = '';
@@ -297,26 +352,36 @@
             let subpastasHtml = '';
             if (no.subpastas && no.subpastas.length > 0) {
                 no.subpastas.forEach(sub => {
-                    subpastasHtml += renderizarNoArvore(sub);
+                    subpastasHtml += renderizarNoArvoreClean(sub);
                 });
             }
 
             return `
-                <div class="card p-3 mb-2 bg-white shadow-sm border-start border-primary border-4">
+                <div class="card p-3 mb-2 bg-white shadow-sm border-start border-secondary border-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
-                            <h6 class="mb-1 fw-bold text-primary">📁 ${no.nome}</h6>
+                            <h6 class="mb-1 fw-bold text-dark">📁 ${no.nome}</h6>
                             <small class="text-muted text-break">${no.caminho || ''}</small>
                         </div>
-                        <span class="badge bg-primary fs-6">Total: ${(no.total_ficheiros || 0).toLocaleString()}</span>
+                        <span class="badge bg-secondary fs-6">Total: ${(no.total_ficheiros || 0).toLocaleString()}</span>
                     </div>
                     <div class="mt-2 pt-2 border-top">
-                        <div class="small fw-bold text-secondary mb-1">Extensões nesta pasta:</div>
+                        <div class="small fw-bold text-secondary mb-1">Extensões:</div>
                         <div class="d-flex flex-wrap">${extsHtml}</div>
                     </div>
                     ${subpastasHtml ? `<div class="tree-node">${subpastasHtml}</div>` : ''}
                 </div>
             `;
+        }
+
+        // Extrai o IP ou nome do host de um caminho UNC (ex: \\192.168.1.50\pasta ou \\servidor\dados)
+        function extrairIpOuHost(caminho) {
+            if (!caminho || !caminho.startsWith('\\\\')) return "Rede Local / Servidor Principal (Local)";
+            const partes = caminho.split('\\');
+            if (partes.length >= 3 && partes[2]) {
+                return `🖥️ IP / Máquina: ${partes[2]}`;
+            }
+            return "🖥️ Máquina de Rede Desconhecida";
         }
 
         async function visualizarBackup(nomeFicheiro) {
@@ -351,44 +416,82 @@
                     if (dadosJson.projetos.length === 0) {
                         containerArvore.innerHTML = `<div class="alert alert-warning m-3">Nenhum projeto registado neste backup.</div>`;
                     } else {
-                        dadosJson.projetos.forEach(proj => {
-                            const caminhosDoProj = dadosJson.caminhos.filter(c => c.projeto_id === proj.id);
-                            
-                            let caminhosHtml = '';
-                            if (caminhosDoProj.length === 0) {
-                                caminhosHtml = `<p class="text-muted small">Sem caminhos associados a este projeto neste backup.</p>`;
-                            } else {
-                                caminhosDoProj.forEach(caminho => {
-                                    const arvoreDados = caminho.ultimo_historico ? caminho.ultimo_historico.extensoes_detalhe : null;
-                                    const totalGlobal = caminho.ultimo_historico ? caminho.ultimo_historico.total_ficheiros : 0;
+                        // Agrupar caminhos por IP/Máquina para cumprir rigorosamente o pedido do coordenador
+                        const mapaPorIp = {};
 
-                                    if (arvoreDados && Object.keys(arvoreDados).length > 0) {
-                                        caminhosHtml += `
-                                            <div class="mb-3">
-                                                <div class="p-2 bg-secondary text-white rounded mb-2 d-flex justify-content-between align-items-center">
-                                                    <small class="text-break">📍 ${caminho.localizacao}</small>
-                                                    <span class="badge bg-light text-dark">Total: ${(totalGlobal).toLocaleString()}</span>
-                                                </div>
-                                                ${renderizarNoArvore(arvoreDados)}
-                                            </div>
-                                        `;
-                                    } else {
-                                        caminhosHtml += `
-                                            <div class="p-3 bg-white rounded mb-2 border">
-                                                <small class="text-break text-muted">📍 ${caminho.localizacao} (Sem histórico de scan registado neste backup)</small>
-                                            </div>
-                                        `;
-                                    }
-                                });
+                        dadosJson.caminhos.forEach(caminho => {
+                            const ipHost = extrairIpOuHost(caminho.localizacao);
+                            if (!mapaPorIp[ipHost]) {
+                                mapaPorIp[ipHost] = [];
                             }
+                            mapaPorIp[ipHost].push(caminho);
+                        });
 
+                        let contadorAccordion = 0;
+
+                        // Desenhar a vista clean agrupada por IP com acordeão (botão +)
+                        for (let [ipHost, caminhosDoIp] of Object.entries(mapaPorIp)) {
+                            contadorAccordion++;
+                            const collapseId = `collapseIp_${contadorAccordion}`;
+                            const headerId = `headingIp_${contadorAccordion}`;
+
+                            let caminhosHtml = '';
+                            caminhosDoIp.forEach(caminho => {
+                                const projObj = dadosJson.projetos.find(p => p.id === caminho.projeto_id);
+                                const nomeProj = projObj ? projObj.nome : "Projeto Desconhecido";
+                                const arvoreDados = caminho.ultimo_historico ? caminho.ultimo_historico.extensoes_detalhe : null;
+                                const totalGlobal = caminho.ultimo_historico ? caminho.ultimo_historico.total_ficheiros : 0;
+                                const estadoScan = caminho.ultimo_historico ? caminho.ultimo_historico.estado : "DESCONHECIDO";
+                                const detalhesErro = caminho.ultimo_historico ? caminho.ultimo_historico.detalhes : "";
+
+                                let badgeEstado = estadoScan === "ERRO" ? `<span class="badge bg-danger" title="${detalhesErro}">❌ Erro</span>` : `<span class="badge bg-success">✅ OK</span>`;
+
+                                let subArvoreHtml = '';
+                                if (arvoreDados && Object.keys(arvoreDados).length > 0) {
+                                    subArvoreHtml = renderizarNoArvoreClean(arvoreDados);
+                                } else {
+                                    subArvoreHtml = `<p class="text-muted small p-2">Sem histórico de scan detalhado para este caminho.</p>`;
+                                }
+
+                                caminhosHtml += `
+                                    <div class="card p-3 mb-3 bg-white shadow-sm border-start border-primary border-4">
+                                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                            <div>
+                                                <span class="badge bg-primary mb-1">📁 Projeto: ${nomeProj}</span>
+                                                <h6 class="m-0 text-secondary">📍 ${caminho.localizacao}</h6>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                ${badgeEstado}
+                                                <span class="badge bg-dark">Total Ficheiros: ${totalGlobal.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 pt-2 border-top">
+                                            <span class="fw-bold small text-muted">Estrutura de Pastas e Subpastas:</span>
+                                            <div class="mt-2">
+                                                ${subArvoreHtml}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+
+                            // Bloco principal nível 1: Apenas o IP com o botão de expandir (+)
                             containerArvore.innerHTML += `
-                                <div class="card p-3 mb-3 bg-white shadow-sm border-top border-primary border-3">
-                                    <h4 class="text-primary mb-3">📂 Projeto: ${proj.nome}</h4>
-                                    ${caminhosHtml}
+                                <div class="card mb-3 shadow-sm border">
+                                    <div class="card-header bg-white p-3 d-flex justify-content-between align-items-center" id="${headerId}">
+                                        <h5 class="m-0 fw-bold text-primary">${ipHost}</h5>
+                                        <button class="btn btn-sm btn-outline-primary fw-bold px-3" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+                                            ➕ Expandir Pastas (${caminhosDoIp.length})
+                                        </button>
+                                    </div>
+                                    <div id="${collapseId}" class="collapse" aria-labelledby="${headerId}" data-bs-parent="#vista-arvore">
+                                        <div class="card-body bg-light p-3">
+                                            ${caminhosHtml}
+                                        </div>
+                                    </div>
                                 </div>
                             `;
-                        });
+                        }
                     }
                 } else {
                     containerArvore.innerHTML = `<div class="alert alert-danger m-3">Estrutura de backup inválida ou antiga.</div>`;
@@ -553,6 +656,90 @@
                 .catch(err => console.error("Erro na pesquisa do modal:", err));
             });
         }
+
+        // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
+        async function resolverAlertaDoSino(idAlerta) {
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    atualizarSinoNotificacoes();
+                } else {
+                    alert("Erro ao marcar o alerta como resolvido.");
+                }
+            } catch (e) {
+                console.error("Erro ao resolver alerta:", e);
+            }
+        }
+
+        async function atualizarSinoNotificacoes() {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const dados = await res.json();
+                    let alertasInatividade = [];
+
+                    if (dados.alertas) {
+                        alertasInatividade = dados.alertas.filter(a => 
+                            (a.tipo_erro && a.tipo_erro.toLowerCase().includes('inativ'))
+                        );
+                    }
+
+                    const badge = document.getElementById('badge-notificacoes');
+                    const listaMenu = document.getElementById('lista-notificacoes');
+                    
+                    if (badge && listaMenu) {
+                        const total = alertasInatividade.length;
+                        
+                        if (total > 0) {
+                            badge.textContent = total > 99 ? '99+' : total;
+                            badge.classList.remove('d-none');
+                            
+                            listaMenu.innerHTML = `<li class="dropdown-header fw-bold text-dark border-bottom mb-2 px-3">Notificações de Inatividade</li>`;
+                            
+                            alertasInatividade.forEach(alerta => {
+                                const dataCaminho = alerta.localizacao ? alerta.localizacao.replace(/\\/g, '\\\\').replace(/"/g, '&quot;') : '';
+                                
+                                listaMenu.innerHTML += `
+                                    <li>
+                                        <div class="dropdown-item py-2 px-3" style="white-space: normal; cursor: default;">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <strong class="text-warning small">⚠️ ${alerta.nome_projeto || 'Aviso'}</strong>
+                                                <small class="text-muted" style="font-size: 0.7em;">${alerta.data_hora ? alerta.data_hora.split(' ')[0] : 'Recente'}</small>
+                                            </div>
+                                            <div class="small text-muted mb-1" style="font-size: 0.8em; line-height: 1.2;"><b>${alerta.tipo_erro}</b></div>
+                                            <div class="small text-secondary text-break mb-2" style="font-size: 0.75rem;">📍 ${alerta.localizacao || ''}</div>
+                                            
+                                            <div class="d-flex justify-content-end gap-1 border-top pt-2">
+                                                ${alerta.localizacao ? `<button class="btn btn-sm btn-outline-info py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">📂 Abrir</button>` : ''}
+                                                <button class="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" onclick="resolverAlertaDoSino(${alerta.id})">✅ Resolver</button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li><hr class="dropdown-divider m-0"></li>
+                                `;
+                            });
+                        } else {
+                            badge.classList.add('d-none');
+                            listaMenu.innerHTML = `
+                                <li><h6 class="dropdown-header text-center py-2">Notificações</h6></li>
+                                <li><div class="dropdown-item text-center text-muted small py-3">Sem pastas inativas de momento! 🎉</div></li>
+                            `;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Erro ao atualizar o sino:", e);
+            }
+        }
+
+        atualizarSinoNotificacoes();
+        setInterval(atualizarSinoNotificacoes, 10000);
     </script>
 </body>
 </html>
