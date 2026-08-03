@@ -14,6 +14,9 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_j
 from functools import wraps
 from dotenv import load_dotenv
 import psutil
+import shutil
+import subprocess
+import string
 
 
 
@@ -375,6 +378,69 @@ def executar_scan_caminho(caminho_obj):
     return estado_atual, total_ficheiros
 
 
+def obter_letra_livre():
+    # Percorre o alfabeto de trás para a frente (Z até E)
+    for letra in reversed(string.ascii_uppercase):
+        if letra not in ['A', 'B', 'C', 'D']: # Evita as drives normais do sistema
+            letra_caminho = f"{letra}:\\"
+            # Se a letra não existir no PC no momento, devolve essa!
+            if not os.path.exists(letra_caminho):
+                return f"{letra}:"
+    return None
+
+
+def cacar_partilha_remota(ip, utilizador, password):
+    """
+    Entra no IPC$, faz o net view, e procura uma pasta partilhada válida,
+    ignorando pastas restritas de projetos (como CMPORTO).
+    """
+    # 1. Autenticar no IPC$
+    comando_ipc = ["net", "use", f"\\\\{ip}\\IPC$", f"/user:{utilizador}", password]
+    subprocess.run(comando_ipc, capture_output=True, text=True, shell=False)
+
+    # 2. Perguntar ao PC as partilhas dele
+    comando_view = ["net", "view", f"\\\\{ip}"]
+    resultado_view = subprocess.run(comando_view, capture_output=True, text=True, shell=False)
+
+    partilhas_candidatas = []
+    linhas = resultado_view.stdout.splitlines()
+    ler_dados = False
+
+    # Lista Negra: Pastas que sabemos que dão Erro 5 ou são de projeto
+    blacklist = ["cmporto", "admin", "backup", "prints", "fax"]
+
+    # 3. Ler o output e recolher as pastas válidas
+    for linha in linhas:
+        if linha.startswith("----"):
+            ler_dados = True
+            continue
+            
+        if ler_dados and linha.strip():
+            if "concluído" in linha.lower() or "completed" in linha.lower():
+                continue
+                
+            partes = linha.split()
+            nome_partilha = partes[0]
+            
+            # Ignora se estiver na blacklist
+            if nome_partilha.lower() in blacklist:
+                continue
+
+            tipo_partilha = partes[1].lower() if len(partes) > 1 else ""
+            
+            # Se for explicitamente do tipo disco, pomos logo no topo da lista
+            if "disco" in tipo_partilha or "disk" in tipo_partilha:
+                partilhas_candidatas.insert(0, nome_partilha)
+            else:
+                partilhas_candidatas.append(nome_partilha)
+
+    # 4. Fechar a ligação da receção
+    subprocess.run(["net", "use", f"\\\\{ip}\\IPC$", "/delete", "/y"], capture_output=True, shell=False)
+
+    # Devolve a primeira candidata válida que não seja restrita (ou None se não houver nenhuma)
+    return partilhas_candidatas[0] if partilhas_candidatas else None
+
+
 # Rota para descarregar o ficheiro .reg diretamente da raiz do projeto
 @app.route('/api/download/reg', methods=['GET'])
 def download_reg_file():
@@ -404,6 +470,86 @@ def download_backup(filename):
 def listar_logs():
     logs = LogAtividade.query.order_by(LogAtividade.data_hora.desc()).all()
     return jsonify([log.to_dict() for log in logs]), 200
+
+
+@app.route('/api/computadores/<int:pc_id>/espaco', methods=['GET'])
+@jwt_required()
+def verificar_espaco_pc(pc_id):
+    pc = ComputadorRede.query.get_or_404(pc_id)
+    
+    if not pc.ip:
+        return jsonify({"sucesso": False, "erro": "O IP do computador não está definido."}), 400
+        
+    # --- CENÁRIO 1: É o PC Local ---
+    if pc.ip == "127.0.0.1" or pc.ip.lower() == "localhost":
+        try:
+            uso = shutil.disk_usage("C:\\")
+            total_gb = round(uso.total / (2**30), 2)
+            livre_gb = round(uso.free / (2**30), 2)
+            usado_gb = round(uso.used / (2**30), 2)
+            percentagem = round((uso.used / uso.total) * 100, 1)
+            
+            return jsonify({
+                "sucesso": True,
+                "discos": [{
+                    "letra": "C", "total_gb": total_gb, "livre_gb": livre_gb,
+                    "usado_gb": usado_gb, "percentagem": percentagem
+                }]
+            }), 200
+        except Exception as e:
+            return jsonify({"sucesso": False, "erro": str(e)}), 500
+
+    # --- CENÁRIO 2: É um PC Remoto na Rede ---
+    if not pc.utilizador_rede or not pc.password_rede:
+        return jsonify({"sucesso": False, "erro": "Faltam credenciais de rede para este PC."}), 400
+
+    # Pede ao sistema uma letra que não esteja a ser usada
+    letra_drive = obter_letra_livre()
+    if not letra_drive:
+         return jsonify({"sucesso": False, "erro": "O servidor ficou sem letras de unidade disponíveis."}), 500
+    
+    try:
+        nome_partilha = cacar_partilha_remota(pc.ip, pc.utilizador_rede, pc.password_rede)
+
+        
+        if not nome_partilha:
+            return jsonify({"sucesso": False, "erro": f"Nenhuma pasta partilhada encontrada no IP {pc.ip}."}), 404
+            
+        caminho_rede = f"\\\\{pc.ip}\\{nome_partilha}"
+        
+        # Mapeia a unidade dinâmica para a partilha encontrada
+        comando_map = ["net", "use", letra_drive, caminho_rede, f"/user:{pc.utilizador_rede}", pc.password_rede]
+        resultado_map = subprocess.run(comando_map, capture_output=True, text=True, shell=False)
+        
+        if resultado_map.returncode != 0:
+            return jsonify({"sucesso": False, "erro": f"Erro a mapear partilha: {resultado_map.stderr}"}), 500
+            
+        # Extrai os dados do disco com base na letra dinâmica que calhou
+        uso = shutil.disk_usage(f"{letra_drive}\\")
+        total_gb = round(uso.total / (2**30), 2)
+        livre_gb = round(uso.free / (2**30), 2)
+        usado_gb = round(uso.used / (2**30), 2)
+        percentagem = round((uso.used / uso.total) * 100, 1)
+        
+        # Limpa a ligação no fim
+        subprocess.run(["net", "use", letra_drive, "/delete", "/y"], capture_output=True, shell=False)
+        
+        return jsonify({
+            "sucesso": True,
+            "discos": [{
+                "letra": "C", 
+                "total_gb": total_gb, 
+                "livre_gb": livre_gb,
+                "usado_gb": usado_gb, 
+                "percentagem": percentagem,
+                "nota_tecnica": f"Lido via pasta partilhada '{nome_partilha}' em {letra_drive}"
+            }]
+        }), 200
+        
+    except Exception as e:
+        print(f"\n[ERRO FATAL] PC {pc.ip}: {str(e)}\n")
+        subprocess.run(["net", "use", letra_drive, "/delete", "/y"], capture_output=True, shell=False)
+        return jsonify({"sucesso": False, "erro": f"Erro de ligação: {str(e)}"}), 500
 
 
 #motor de pesquisa
@@ -536,6 +682,23 @@ def criar_computador_rede():
         "mensagem": "Computador registado com sucesso!",
         "computador": novo_pc.to_dict()
     }), 201
+
+
+@app.route('/api/computadores/<int:pc_id>', methods=['PUT'])
+def editar_computador(pc_id):
+    pc = ComputadorRede.query.get_or_404(pc_id) # Corrigido para ComputadorRede
+    dados = request.get_json()
+    
+    pc.nome_pc = dados.get('nome_pc', pc.nome_pc)
+    pc.ip = dados.get('ip', pc.ip)
+    pc.utilizador_rede = dados.get('utilizador_rede', pc.utilizador_rede)
+    
+    password = dados.get('password_rede')
+    if password:
+        pc.password_rede = password
+        
+    db.session.commit()
+    return jsonify({"sucesso": True, "mensagem": "Computador atualizado com sucesso!"}), 200
 
 
 # Rota para apagar um PC do inventário

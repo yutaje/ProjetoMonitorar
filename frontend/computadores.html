@@ -28,7 +28,7 @@
                     <li class="nav-item"><a class="nav-link text-nowrap" href="alertas.html">⚠️ Alertas</a></li>
                     <li class="nav-item"><a class="nav-link text-nowrap" href="backups.html">💾 Backups</a></li>
                     <li class="nav-item"><a class="nav-link text-nowrap" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
-                    <li class="nav-item"><a class="nav-link text-nowrap" href="computadores.html">🖥️ PCs na Rede</a></li>
+                    <li class="nav-item"><a class="nav-link active text-nowrap" href="computadores.html">🖥️ PCs na Rede</a></li>
                 </ul>
 
                 <div class="d-flex align-items-center gap-3">
@@ -45,7 +45,7 @@
         <div class="row mb-4 align-items-center">
             <div class="col-md-8">
                 <h2>🖥️ Inventário de PCs e Servidores na Rede</h2>
-                <p class="text-muted">Regista e gere os computadores e servidores acessíveis na rede para associação rápida em projetos.</p>
+                <p class="text-muted">Regista, gere e edita os computadores e servidores acessíveis na rede, monitorizando o espaço em disco em tempo real.</p>
             </div>
             <div class="col-md-4 text-md-end">
                 <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#modalAdicionarPC">
@@ -65,11 +65,12 @@
                                 <th class="px-4 py-3">Nome do PC / Hostname</th>
                                 <th class="px-4 py-3">Endereço IP</th>
                                 <th class="px-4 py-3">Utilizador de Acesso</th>
+                                <th class="px-4 py-3">Espaço em Discos (WinRM)</th>
                                 <th class="px-4 py-3 text-end">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-pcs-rede">
-                            <tr><td colspan="4" class="text-center p-4 text-muted">A carregar computadores...</td></tr>
+                            <tr><td colspan="5" class="text-center p-4 text-muted">A carregar computadores...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -96,15 +97,51 @@
                             <input type="text" id="pc-ip" class="form-control" placeholder="Ex: 192.168.1.50" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Utilizador de Acesso (Opcional):</label>
+                            <label class="form-label fw-bold">Utilizador de Acesso:</label>
                             <input type="text" id="pc-user" class="form-control" placeholder="Ex: administrador">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Password de Acesso (Opcional):</label>
+                            <label class="form-label fw-bold">Password de Acesso:</label>
                             <input type="password" id="pc-pass" class="form-control" placeholder="Password de rede">
                         </div>
                         <div class="text-end">
                             <button type="submit" class="btn btn-success fw-bold px-4">Guardar Computador</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Editar PC da Rede -->
+    <div class="modal fade" id="modalEditarPC" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">✏️ Editar Computador</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formEditarPC">
+                        <input type="hidden" id="edit-pc-id">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nome do PC / Hostname:</label>
+                            <input type="text" id="edit-pc-nome" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Endereço IP:</label>
+                            <input type="text" id="edit-pc-ip" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Utilizador de Acesso:</label>
+                            <input type="text" id="edit-pc-user" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nova Password (Deixar em branco para manter):</label>
+                            <input type="password" id="edit-pc-pass" class="form-control" placeholder="Nova password (opcional)">
+                        </div>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-success fw-bold px-4">Guardar Alterações</button>
                         </div>
                     </form>
                 </div>
@@ -151,17 +188,27 @@
                 
                 tbody.innerHTML = '';
                 if (pcs.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-muted">Nenhum computador registado na rede.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-muted">Nenhum computador registado na rede.</td></tr>`;
                     return;
                 }
 
                 pcs.forEach(pc => {
+                    const nomeSeguro = pc.nome_pc.replace(/'/g, "\\'");
+                    const ipSeguro = pc.ip.replace(/'/g, "\\'");
+                    const userSeguro = (pc.utilizador_rede || '').replace(/'/g, "\\'");
+
                     tbody.innerHTML += `
                         <tr>
                             <td class="px-4 py-3 fw-bold text-primary">🖥️ ${pc.nome_pc}</td>
                             <td class="px-4 py-3"><code>${pc.ip}</code></td>
                             <td class="px-4 py-3 text-muted">${pc.utilizador_rede || '<i>Não definido</i>'}</td>
-                            <td class="px-4 py-3 text-end">
+                            <td class="px-4 py-3">
+                                <div id="espaco-pc-${pc.id}">
+                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 fw-bold" onclick="carregarEspacoDisco(${pc.id})">📊 Analisar Disco</button>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-end text-nowrap">
+                                <button class="btn btn-sm btn-outline-primary fw-bold me-1" onclick="abrirModalEditarPC(${pc.id}, '${nomeSeguro}', '${ipSeguro}', '${userSeguro}')">✏️ Editar</button>
                                 <button class="btn btn-sm btn-outline-danger fw-bold" onclick="apagarPcRede(${pc.id})">🗑️ Apagar</button>
                             </td>
                         </tr>
@@ -169,7 +216,43 @@
                 });
             } catch (e) {
                 console.error(e);
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-danger">Erro ao comunicar com o servidor.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-danger">Erro ao comunicar com o servidor.</td></tr>`;
+            }
+        }
+
+        async function carregarEspacoDisco(pcId) {
+            const container = document.getElementById(`espaco-pc-${pcId}`);
+            container.innerHTML = `<span class="spinner-border spinner-border-sm text-primary" role="status"></span> <small class="text-muted">A ler...</small>`;
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/computadores/${pcId}/espaco`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const dados = await res.json();
+
+                if (res.ok && dados.sucesso) {
+                    let htmlDiscos = '';
+                    
+                    dados.discos.forEach(disco => {
+                        let corBarra = disco.percentagem > 85 ? 'bg-danger' : (disco.percentagem > 70 ? 'bg-warning' : 'bg-success');
+                        
+                        htmlDiscos += `
+                            <div class="mb-2">
+                                <div class="small fw-bold">Disco ${disco.letra}: ${disco.livre_gb} GB livres / ${disco.total_gb} GB (${disco.percentagem}% usado)</div>
+                                <div class="progress" style="height: 6px; width: 160px;">
+                                    <div class="progress-bar ${corBarra}" role="progressbar" style="width: ${disco.percentagem}%"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    container.innerHTML = htmlDiscos;
+                } else {
+                    container.innerHTML = `<span class="text-danger small" title="${dados.erro || 'Erro'}">⚠️ ${dados.erro || 'Indisponível'}</span>`;
+                }
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = `<span class="text-danger small">⚠️ Erro de ligação</span>`;
             }
         }
 
@@ -199,6 +282,48 @@
                     carregarPcsRede();
                 } else {
                     mostrarMsg(respData.erro || "Erro ao registar PC.", "danger");
+                }
+            } catch (err) {
+                console.error(err);
+                mostrarMsg("Erro de ligação.", "danger");
+            }
+        });
+
+        function abrirModalEditarPC(id, nome, ip, user) {
+            document.getElementById('edit-pc-id').value = id;
+            document.getElementById('edit-pc-nome').value = nome;
+            document.getElementById('edit-pc-ip').value = ip;
+            document.getElementById('edit-pc-user').value = (user && user !== 'null') ? user : '';
+            document.getElementById('edit-pc-pass').value = '';
+            new bootstrap.Modal(document.getElementById('modalEditarPC')).show();
+        }
+
+        document.getElementById('formEditarPC').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-pc-id').value;
+            const dados = {
+                nome_pc: document.getElementById('edit-pc-nome').value.trim(),
+                ip: document.getElementById('edit-pc-ip').value.trim(),
+                utilizador_rede: document.getElementById('edit-pc-user').value.trim(),
+                password_rede: document.getElementById('edit-pc-pass').value.trim()
+            };
+
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/computadores/${id}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(dados)
+                });
+                const respData = await res.json();
+                if (res.ok) {
+                    mostrarMsg("Computador atualizado com sucesso!", "success");
+                    bootstrap.Modal.getInstance(document.getElementById('modalEditarPC')).hide();
+                    carregarPcsRede();
+                } else {
+                    mostrarMsg(respData.erro || "Erro ao atualizar PC.", "danger");
                 }
             } catch (err) {
                 console.error(err);
