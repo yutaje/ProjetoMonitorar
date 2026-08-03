@@ -32,14 +32,12 @@
                     <li class="nav-item"><a class="nav-link text-nowrap" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
                 </ul>
 
-                <!-- PESQUISA GLOBAL HÍBRIDA (LIVE + MODAL) -->
                 <form class="d-flex me-3 position-relative" id="formPesquisaGlobal" style="min-width: 250px;">
                     <div class="input-group">
-                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto..." autocomplete="off">
+                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto ou subpasta..." autocomplete="off">
                         <button class="btn btn-light border" type="submit" id="btnPesquisa" title="Pesquisar (Enter)">🔍</button>
                     </div>
                     
-                    <!-- Caixa flutuante para os resultados em tempo real (Live) -->
                     <div id="dropdownResultados" class="dropdown-menu w-100 shadow-lg" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 400px; overflow-y: auto;">
                     </div>
                 </form>
@@ -89,7 +87,6 @@
         </div>
     </div>
 
-    <!-- Modal de Resultados da Pesquisa Completa -->
     <div class="modal fade" id="modalResultadosPesquisa" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
@@ -99,7 +96,6 @@
                 </div>
                 <div class="modal-body p-0">
                     <div id="lista-resultados-pesquisa" class="list-group list-group-flush">
-                        <!-- Os resultados completos vão aparecer aqui -->
                     </div>
                 </div>
             </div>
@@ -128,6 +124,23 @@
             if (btnAdmin) btnAdmin.classList.remove('d-none');
         }
 
+        function abrirPastaDoBotao(botao) {
+            let caminho = botao.getAttribute('data-caminho');
+            if (!caminho) return;
+            
+            caminho = caminho.replace(/\\/g, '/');
+            const url = `monitorapp://${encodeURI(caminho)}`;
+            
+            let iframe = document.getElementById('hidden-protocol-frame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'hidden-protocol-frame';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            iframe.src = url;
+        }
+
         async function carregarContagensHub() {
             try {
                 const resPendentes = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
@@ -154,22 +167,15 @@
 
         carregarContagensHub();
 
-        // ==========================================
-        // LÓGICA DE PESQUISA (LIVE SEARCH + MODAL)
-        // ==========================================
-        
-        // Função nova para copiar o caminho diretamente do Modal
         window.copiarCaminhoModal = async function(caminho, btn) {
             try {
                 await navigator.clipboard.writeText(caminho);
                 const textoOriginal = btn.innerHTML;
                 
-                // Muda o aspeto do botão para dar feedback
                 btn.innerHTML = '✅ Copiado!';
                 btn.classList.replace('btn-outline-secondary', 'btn-success');
                 btn.classList.add('text-white');
                 
-                // Volta ao normal passado 2 segundos
                 setTimeout(() => {
                     btn.innerHTML = textoOriginal;
                     btn.classList.replace('btn-success', 'btn-outline-secondary');
@@ -187,7 +193,6 @@
         let timeoutPesquisa; 
 
         if(inputPesquisa && formPesquisa) {
-            // 1. AÇÃO ENQUANTO ESCREVES (LIVE SEARCH)
             inputPesquisa.addEventListener('input', function(e) {
                 let termo = this.value.trim();
                 
@@ -209,13 +214,13 @@
                             dropdownResultados.innerHTML = `<span class="dropdown-item text-muted">Nenhum resultado para "${data.termo}".</span>`;
                         } else {
                             data.resultados.forEach(proj => {
-                                let item = `
-                                    <a class="dropdown-item border-bottom py-2" href="monitorapp://${proj.caminho}">
+                                const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
+                                dropdownResultados.innerHTML += `
+                                    <div class="dropdown-item border-bottom py-2" style="cursor: pointer;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                         <div class="fw-bold text-primary">${proj.nome}</div>
                                         <small class="text-muted text-wrap" style="font-size: 0.75rem;">${proj.caminho}</small>
-                                    </a>
+                                    </div>
                                 `;
-                                dropdownResultados.innerHTML += item;
                             });
                         }
                         dropdownResultados.style.display = 'block'; 
@@ -223,21 +228,18 @@
                 }, 300); 
             });
 
-            // Esconder dropdown clicando fora
             document.addEventListener('click', function(event) {
                 if (!formPesquisa.contains(event.target)) {
                     dropdownResultados.style.display = 'none';
                 }
             });
 
-            // Se voltar a clicar na barra
             inputPesquisa.addEventListener('focus', function() {
                 if (this.value.trim() !== "" && dropdownResultados.innerHTML !== "") {
                     dropdownResultados.style.display = 'block';
                 }
             });
 
-            // 2. AÇÃO AO CARREGAR NO ENTER OU NA LUPA (MODAL)
             formPesquisa.addEventListener('submit', function(e) {
                 e.preventDefault(); 
                 let termo = inputPesquisa.value.trim();
@@ -258,8 +260,8 @@
                         listaModal.innerHTML = `<div class="p-4 text-center text-muted fw-bold">Nenhum resultado encontrado para "${data.termo}".</div>`;
                     } else {
                         data.resultados.forEach(proj => {
-                            // Escapar as barras invertidas do Windows e plicas para não partir o JavaScript no 'onclick'
                             const caminhoEscapado = proj.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                             
                             listaModal.innerHTML += `
                                 <div class="list-group-item p-3">
@@ -272,9 +274,9 @@
                                             <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminhoModal('${caminhoEscapado}', this)">
                                                 📋 Copiar
                                             </button>
-                                            <a class="btn btn-outline-info text-nowrap fw-bold" href="monitorapp://${proj.caminho}">
+                                            <button type="button" class="btn btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                                 📂 Abrir
-                                            </a>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

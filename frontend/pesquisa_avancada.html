@@ -31,7 +31,6 @@
                     <li class="nav-item"><a class="nav-link active text-nowrap text-info fw-bold" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
                 </ul>
 
-                <!-- PESQUISA GLOBAL (BARRA) -->
                 <form class="d-flex me-3 position-relative" id="formPesquisaGlobal" style="min-width: 250px;">
                     <div class="input-group">
                         <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto..." autocomplete="off">
@@ -49,7 +48,6 @@
         </div>
     </nav>
 
-    <!-- ZONA DA PESQUISA AVANÇADA -->
     <div class="container pb-5">
         <div class="row mb-4">
             <div class="col-12 text-center">
@@ -92,7 +90,6 @@
             </div>
         </div>
 
-        <!-- RESULTADOS -->
         <div id="zona-resultados" style="display: none;">
             <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -108,7 +105,6 @@
             </ul>
             
             <div class="tab-content bg-white p-4 rounded shadow-sm border border-top-0">
-                <!-- TAB ENCONTRADOS -->
                 <div class="tab-pane fade show active" id="encontrados" role="tabpanel">
                     
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -134,13 +130,11 @@
                                 </tr>
                             </thead>
                             <tbody id="tabela-encontrados">
-                                <!-- Preenchido pelo JS -->
                             </tbody>
                         </table>
                     </div>
                 </div>
                 
-                <!-- TAB NÃO ENCONTRADOS -->
                 <div class="tab-pane fade" id="falhas" role="tabpanel">
                     
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -158,14 +152,12 @@
                     </div>
 
                     <ul class="list-group list-group-flush" id="lista-falhas">
-                        <!-- Preenchido pelo JS -->
                     </ul>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal Resultados (Apenas para não quebrar a pesquisa global da Navbar) -->
     <div class="modal fade" id="modalResultadosPesquisa" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
@@ -203,13 +195,21 @@
         let dadosEncontradosGlobal = [];
         let dadosFalhasGlobal = [];
 
-        // Mesma função exata do projetos.html que funciona a 100%
         function abrirPastaDoBotao(botao) {
             let caminho = botao.getAttribute('data-caminho');
             if (!caminho) return;
+            
             caminho = caminho.replace(/\\/g, '/');
-            const caminhoCodificado = encodeURI(caminho);
-            window.location.href = `monitorapp://${caminhoCodificado}`;
+            const url = `monitorapp://${encodeURI(caminho)}`;
+            
+            let iframe = document.getElementById('hidden-protocol-frame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'hidden-protocol-frame';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            iframe.src = url;
         }
 
         window.copiarCaminho = async function(caminho, btn) {
@@ -313,9 +313,6 @@
             } catch (err) { alert('Falha ao copiar para a área de transferência.'); }
         };
 
-        // ==========================================
-        // LÓGICA DA PESQUISA EM LOTE
-        // ==========================================
         document.getElementById('btn-iniciar-pesquisa').addEventListener('click', function() {
             const textarea = document.getElementById('texto-lote').value;
             const linhasBrutas = textarea.split('\n'); 
@@ -357,7 +354,6 @@
                 dadosFalhasGlobal = [];
                 let contagemTotalMatch = 0;
 
-                // 1. Processar os Encontrados
                 data.encontrados.forEach(item => {
                     item.resultados.forEach(res => {
                         contagemTotalMatch++;
@@ -401,7 +397,6 @@
                     });
                 });
 
-                // 2. Processar os Falhados
                 data.nao_encontrados.forEach(termo => {
                     dadosFalhasGlobal.push(termo);
                     ulFalhas.innerHTML += `<li class="list-group-item text-danger fw-bold"><i class="bi bi-x-circle me-2"></i> ${termo}</li>`;
@@ -422,9 +417,6 @@
             });
         });
 
-        // ==========================================
-        // LÓGICA DA PESQUISA GLOBAL (NAVBAR)
-        // ==========================================
         const formPesquisa = document.getElementById('formPesquisaGlobal');
         const inputPesquisa = document.getElementById('inputPesquisa');
         const dropdownResultados = document.getElementById('dropdownResultados');

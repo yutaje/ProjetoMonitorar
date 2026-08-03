@@ -1,4 +1,4 @@
-const token = localStorage.getItem('meu_token_jwt');
+const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('token') || localStorage.getItem('access_token');
 
 if (!token) {
     alert("Acesso negado! Tens de fazer login primeiro.");
@@ -38,7 +38,6 @@ if (userRole) {
 // ==========================================
 async function atualizarMetricasDashboard() {
     try {
-        // 1. Contagem de Projetos Ativos
         const resProjetos = await fetch('http://127.0.0.1:5000/projetos', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -47,7 +46,6 @@ async function atualizarMetricasDashboard() {
             document.getElementById('metric-projetos').textContent = projetos.length;
         }
 
-        // 2. Alertas Pendentes
         const resAlertas = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -56,7 +54,6 @@ async function atualizarMetricasDashboard() {
             document.getElementById('metric-alertas').textContent = dadosAlertas.total_pendentes !== undefined ? dadosAlertas.total_pendentes : 0;
         }
 
-        // 3. Recursos da Máquina (CPU, RAM, Disco)
         const resSistema = await fetch('http://127.0.0.1:5000/api/system', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -72,8 +69,25 @@ async function atualizarMetricasDashboard() {
 }
 
 // ==========================================
-// LÓGICA DE PESQUISA HÍBRIDA (LIVE + MODAL)
+// FUNÇÕES DE ABERTURA E CÓPIA SEGURA
 // ==========================================
+function abrirPastaDoBotao(botao) {
+    let caminho = botao.getAttribute('data-caminho');
+    if (!caminho) return;
+    caminho = caminho.replace(/\\/g, '/');
+    const caminhoCodificado = encodeURI(caminho);
+    const url = `monitorapp://${caminhoCodificado}`;
+    
+    let iframe = document.getElementById('hidden-protocol-frame');
+    if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'hidden-protocol-frame';
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+    }
+    iframe.src = url;
+}
+
 window.copiarCaminhoModal = async function(caminho, btn) {
     try {
         await navigator.clipboard.writeText(caminho);
@@ -93,6 +107,9 @@ window.copiarCaminhoModal = async function(caminho, btn) {
     }
 };
 
+// ==========================================
+// LÓGICA DE PESQUISA HÍBRIDA (LIVE + MODAL)
+// ==========================================
 const formPesquisa = document.getElementById('formPesquisaGlobal');
 const inputPesquisa = document.getElementById('inputPesquisa');
 const dropdownResultados = document.getElementById('dropdownResultados');
@@ -120,13 +137,13 @@ if (inputPesquisa && formPesquisa) {
                     dropdownResultados.innerHTML = `<span class="dropdown-item text-muted">Nenhum resultado para "${data.termo}".</span>`;
                 } else {
                     data.resultados.forEach(proj => {
-                        let item = `
-                            <a class="dropdown-item border-bottom py-2" href="monitorapp://${proj.caminho}">
+                        const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
+                        dropdownResultados.innerHTML += `
+                            <div class="dropdown-item border-bottom py-2" style="cursor: pointer;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                 <div class="fw-bold text-primary">${proj.nome}</div>
                                 <small class="text-muted text-wrap" style="font-size: 0.75rem;">${proj.caminho}</small>
-                            </a>
+                            </div>
                         `;
-                        dropdownResultados.innerHTML += item;
                     });
                 }
                 dropdownResultados.style.display = 'block'; 
@@ -168,6 +185,8 @@ if (inputPesquisa && formPesquisa) {
                 } else {
                     data.resultados.forEach(proj => {
                         const caminhoEscapado = proj.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                        const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
+                        
                         listaModal.innerHTML += `
                             <div class="list-group-item p-3">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -179,9 +198,9 @@ if (inputPesquisa && formPesquisa) {
                                         <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminhoModal('${caminhoEscapado}', this)">
                                             📋 Copiar
                                         </button>
-                                        <a class="btn btn-outline-info text-nowrap fw-bold" href="monitorapp://${proj.caminho}">
+                                        <button type="button" class="btn btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                             📂 Abrir
-                                        </a>
+                                        </button>
                                     </div>
                                 </div>
                             </div>

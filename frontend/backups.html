@@ -31,14 +31,12 @@
                     <li class="nav-item"><a class="nav-link text-nowrap" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
                 </ul>
 
-                <!-- PESQUISA GLOBAL HÍBRIDA (LIVE + MODAL) -->
                 <form class="d-flex me-3 position-relative" id="formPesquisaGlobal" style="min-width: 250px;">
                     <div class="input-group">
-                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto..." autocomplete="off">
+                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto ou subpasta..." autocomplete="off">
                         <button class="btn btn-light border" type="submit" id="btnPesquisa" title="Pesquisar (Enter)">🔍</button>
                     </div>
                     
-                    <!-- Caixa flutuante para os resultados em tempo real (Live) -->
                     <div id="dropdownResultados" class="dropdown-menu w-100 shadow-lg" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 400px; overflow-y: auto;">
                     </div>
                 </form>
@@ -51,14 +49,12 @@
         </div>
     </nav>
 
-    <!-- Conteúdo Principal -->
     <div class="container pb-5">
         <div class="row mb-4 align-items-center">
             <div class="col-md-7">
                 <h2>💾 Histórico de Backups</h2>
                 <p class="text-muted">Consulta e transfere os backups do sistema.</p>
             </div>
-            <!-- Filtro de Calendário -->
             <div class="col-md-5 d-flex justify-content-md-end align-items-center gap-2 mt-3 mt-md-0">
                 <label for="filtro-data" class="fw-bold text-nowrap m-0">📅 Data:</label>
                 <input type="date" id="filtro-data" class="form-control shadow-sm" style="max-width: 160px;">
@@ -79,7 +75,6 @@
                             </tr>
                         </thead>
                         <tbody id="lista-backups-container">
-                            <!-- Injetado via JS -->
                         </tbody>
                     </table>
                 </div>
@@ -87,14 +82,12 @@
         </div>
     </div>
 
-    <!-- Modal de Preview com Seletor Duplo (Árvore vs JSON) -->
     <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header bg-dark text-white d-flex justify-content-between align-items-center">
                     <h5 class="modal-title m-0" id="previewModalLabel">Visualizar Backup</h5>
                     
-                    <!-- Botões de Alternância de Vista -->
                     <div class="btn-group btn-group-sm" role="group">
                         <button type="button" class="btn btn-light fw-bold active" id="btnTabArvore" onclick="mudarVista('arvore')">🌲 Vista em Árvore</button>
                         <button type="button" class="btn btn-outline-light fw-bold" id="btnTabJson" onclick="mudarVista('json')">💻 Código JSON</button>
@@ -104,12 +97,9 @@
                 </div>
                 
                 <div class="modal-body p-0 bg-light">
-                    <!-- Vista 1: Árvore Visual de Pastas -->
                     <div id="vista-arvore" class="p-3" style="max-height: 75vh; overflow-y: auto;">
-                        <!-- Injetado via JS -->
                     </div>
 
-                    <!-- Vista 2: Código JSON Cru -->
                     <div id="vista-json" class="p-0" style="display: none; max-height: 75vh; overflow-y: auto;">
                         <pre id="preview-conteudo" class="p-3 m-0" style="background-color: #f8f9fa; font-size: 14px; border: none;"></pre>
                     </div>
@@ -122,7 +112,6 @@
         </div>
     </div>
 
-    <!-- Modal de Resultados da Pesquisa Completa -->
     <div class="modal fade" id="modalResultadosPesquisa" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
@@ -132,14 +121,12 @@
                 </div>
                 <div class="modal-body p-0">
                     <div id="lista-resultados-pesquisa" class="list-group list-group-flush">
-                        <!-- Os resultados completos vão aparecer aqui -->
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const token = localStorage.getItem('meu_token_jwt');
@@ -170,6 +157,23 @@
             msg.className = `alert alert-${tipo} mb-4 fw-bold`;
             msg.classList.remove('d-none');
             setTimeout(() => msg.classList.add('d-none'), 5000);
+        }
+
+        function abrirPastaDoBotao(botao) {
+            let caminho = botao.getAttribute('data-caminho');
+            if (!caminho) return;
+            
+            caminho = caminho.replace(/\\/g, '/');
+            const url = `monitorapp://${encodeURI(caminho)}`;
+            
+            let iframe = document.getElementById('hidden-protocol-frame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'hidden-protocol-frame';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            iframe.src = url;
         }
 
         let todosBackups = [];
@@ -253,7 +257,6 @@
             renderizarLista(todosBackups);
         });
 
-        // Função para alternar entre a Vista em Árvore e o JSON Cru no Modal
         function mudarVista(tipo) {
             const elArvore = document.getElementById('vista-arvore');
             const elJson = document.getElementById('vista-json');
@@ -277,7 +280,6 @@
             }
         }
 
-        // Função recursiva para desenhar a árvore de subpastas (idêntica à dos projetos)
         function renderizarNoArvore(no) {
             if (!no) return '';
 
@@ -339,11 +341,9 @@
                     console.error("Erro ao converter JSON:", e);
                 }
 
-                // Preencher a vista JSON cru
                 document.getElementById('previewModalLabel').textContent = `📄 ${nomeFicheiro}`;
                 document.getElementById('preview-conteudo').textContent = conteudoFormatado;
 
-                // Construir a vista em árvore com base nos dados guardados no backup
                 const containerArvore = document.getElementById('vista-arvore');
                 containerArvore.innerHTML = '';
 
@@ -394,7 +394,6 @@
                     containerArvore.innerHTML = `<div class="alert alert-danger m-3">Estrutura de backup inválida ou antiga.</div>`;
                 }
 
-                // Por defeito, abrir sempre na vista de árvore
                 mudarVista('arvore');
 
                 document.getElementById('mensagem-alerta').classList.add('d-none');
@@ -439,9 +438,6 @@
 
         carregarBackups();
 
-        // ==========================================
-        // LÓGICA DE PESQUISA (LIVE SEARCH + MODAL)
-        // ==========================================
         window.copiarCaminhoModal = async function(caminho, btn) {
             try {
                 await navigator.clipboard.writeText(caminho);
@@ -488,13 +484,13 @@
                             dropdownResultados.innerHTML = `<span class="dropdown-item text-muted">Nenhum resultado para "${data.termo}".</span>`;
                         } else {
                             data.resultados.forEach(proj => {
-                                let item = `
-                                    <a class="dropdown-item border-bottom py-2" href="monitorapp://${proj.caminho}">
+                                const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
+                                dropdownResultados.innerHTML += `
+                                    <div class="dropdown-item border-bottom py-2" style="cursor: pointer;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                         <div class="fw-bold text-primary">${proj.nome}</div>
                                         <small class="text-muted text-wrap" style="font-size: 0.75rem;">${proj.caminho}</small>
-                                    </a>
+                                    </div>
                                 `;
-                                dropdownResultados.innerHTML += item;
                             });
                         }
                         dropdownResultados.style.display = 'block'; 
@@ -529,6 +525,7 @@
                     } else {
                         data.resultados.forEach(proj => {
                             const caminhoEscapado = proj.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                             
                             listaModal.innerHTML += `
                                 <div class="list-group-item p-3">
@@ -541,9 +538,9 @@
                                             <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminhoModal('${caminhoEscapado}', this)">
                                                 📋 Copiar
                                             </button>
-                                            <a class="btn btn-outline-info text-nowrap fw-bold" href="monitorapp://${proj.caminho}">
+                                            <button type="button" class="btn btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                                 📂 Abrir
-                                            </a>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

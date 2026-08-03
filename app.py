@@ -213,8 +213,11 @@ def construir_arvore_pasta(caminho_dir):
     extensoes_dict = {}
     subpastas = []
     
+    is_rede = caminho_dir.startswith('\\\\')
+    
     try:
-        if not os.path.exists(caminho_dir):
+        # Para pastas de rede, evitamos o os.path.exists estrito para prevenir bloqueios por timeout/latência
+        if not is_rede and not os.path.exists(caminho_dir):
             raise FileNotFoundError("A pasta não foi encontrada.")
             
         itens = os.listdir(caminho_dir)
@@ -244,14 +247,10 @@ def construir_arvore_pasta(caminho_dir):
         item_path = os.path.join(caminho_dir, item)
         try:
             if os.path.isdir(item_path):
-                # Chamada recursiva para as subpastas
                 sub_arvore = construir_arvore_pasta(item_path)
                 total_ficheiros += sub_arvore["total_ficheiros"]
-                
-                # Acumular extensões para o total geral desta pasta
                 for ext, count in sub_arvore["extensoes"].items():
                     extensoes_dict[ext] = extensoes_dict.get(ext, 0) + count
-                    
                 subpastas.append(sub_arvore)
             elif os.path.isfile(item_path):
                 total_ficheiros += 1
@@ -281,12 +280,21 @@ def executar_scan_caminho(caminho_obj):
     total_ficheiros = 0
     arvore_completa = {}
 
+    # Identifica se é um caminho de rede (começa com \\)
+    is_rede = localizacao.startswith('\\\\')
+
     try:
-        if not os.path.exists(localizacao):
+        # Se for local, exigimos o os.path.exists estrito. 
+        # Se for rede, evitamos o bloqueio direto do os.path.exists para prevenir falsos positivos por timeout.
+        if not is_rede and not os.path.exists(localizacao):
             raise FileNotFoundError("A pasta não foi encontrada ou o caminho é inválido.")
         
-        # Executa a construção da árvore hierárquica
         arvore_completa = construir_arvore_pasta(localizacao)
+        
+        # Se for rede e a função de árvore apanhou um erro por falha de ligação momentânea
+        if is_rede and arvore_completa.get("erro"):
+            raise OSError(arvore_completa["erro"])
+
         total_ficheiros = arvore_completa["total_ficheiros"]
 
     except PermissionError:
@@ -298,15 +306,21 @@ def executar_scan_caminho(caminho_obj):
         detalhes_msg = "Caminho não encontrado ou diretório inexistente."
         tipo_erro_alerta = "Caminho não encontrado"
     except OSError as e:
-        estado_atual = "ERRO"
-        detalhes_msg = f"Erro de rede ou de sistema de ficheiros: {str(e)}"
-        tipo_erro_alerta = "Rede inacessível / Erro de I/O"
+        if is_rede:
+            # Para pastas de rede, tratamos como AVISO e NÃO geramos alerta crítico automático
+            estado_atual = "AVISO"
+            detalhes_msg = f"Partilha de rede temporariamente inacessível ou lenta: {str(e)}"
+            tipo_erro_alerta = None 
+        else:
+            estado_atual = "ERRO"
+            detalhes_msg = f"Erro de sistema de ficheiros: {str(e)}"
+            tipo_erro_alerta = "Rede inacessível / Erro de I/O"
     except Exception as e:
         estado_atual = "ERRO"
         detalhes_msg = f"Erro desconhecido: {str(e)}"
         tipo_erro_alerta = "Erro desconhecido"
 
-    # Guarda a árvore completa convertida em JSON na coluna extensoes_detalhe
+    # Guarda o histórico na base de dados
     novo_historico = Historico(
         caminho_id=caminho_obj.id,
         estado=estado_atual,
@@ -316,6 +330,7 @@ def executar_scan_caminho(caminho_obj):
     )
     db.session.add(novo_historico)
 
+    # Só cria alerta se for um ERRO real e não um AVISO de rede
     if estado_atual == "ERRO":
         alerta_existente = Alerta.query.filter_by(caminho_id=caminho_obj.id, estado_alerta='Por resolver').first()
         if not alerta_existente:
@@ -449,23 +464,38 @@ def pesquisa_projetos():
     }), 200
 
 
-# NOVA ROTA: Pesquisa Global Rápida
+def procurar_em_subpastas(no_subpasta, termo_lower, projeto_info, resultados_lista):
+    if not no_subpasta or not isinstance(no_subpasta, dict):
+        return
+
+    nome_atual = no_subpasta.get("nome", "").lower()
+    caminho_atual = no_subpasta.get("caminho", "")
+
+    if termo_lower in nome_atual:
+        if not any(r['caminho'] == caminho_atual for r in resultados_lista):
+            resultados_lista.append({
+                "id_projeto": projeto_info.id,
+                "nome": f"{projeto_info.nome} > {no_subpasta.get('nome')}",
+                "id_caminho": None,
+                "caminho": caminho_atual
+            })
+
+    for sub in no_subpasta.get("subpastas", []):
+        procurar_em_subpastas(sub, termo_lower, projeto_info, resultados_lista)
+
 @app.route('/api/pesquisa-global', methods=['GET'])
 @jwt_required()
 def pesquisa_global_rapida():
-    # Nota: tirei o .lower() daqui para a formatação da barra não se perder
     termo = request.args.get('q', '').strip()
     
     if not termo:
         return jsonify({"erro": "Termo de pesquisa vazio"}), 400
 
-    # A MAGIA ESTÁ AQUI: Escapar as barras para o MySQL não se perder!
-    # Se o user pesquisar por "C:\Projetos", transformamos em "C:\\Projetos"
     termo_escapado = termo.replace('\\', '\\\\')
+    termo_lower = termo.lower()
 
     resultados = []
     
-    # Pesquisar pelo nome no modelo Projeto ou pela localização no modelo Caminho
     resultados_query = db.session.query(Projeto, Caminho)\
         .join(Caminho, Caminho.projeto_id == Projeto.id)\
         .filter(
@@ -480,6 +510,18 @@ def pesquisa_global_rapida():
             "id_caminho": caminho.id,
             "caminho": caminho.localizacao
         })
+
+    todos_caminhos = Caminho.query.all()
+    for caminho in todos_caminhos:
+        ultimo_hist = Historico.query.filter_by(caminho_id=caminho.id).order_by(Historico.data_verificacao.desc()).first()
+        if ultimo_hist and ultimo_hist.extensoes_detalhe:
+            try:
+                arvore_json = json.loads(ultimo_hist.extensoes_detalhe)
+                projeto_obj = Projeto.query.get(caminho.projeto_id)
+                if projeto_obj:
+                    procurar_em_subpastas(arvore_json, termo_lower, projeto_obj, resultados)
+            except Exception:
+                continue
     
     return jsonify({
         "termo": termo,
@@ -610,7 +652,7 @@ def pesquisa_lote():
     return jsonify({
         "encontrados": encontrados,
         "nao_encontrados": nao_encontrados
-    }), 2000    
+    }), 200
 
 
 #construir
@@ -834,11 +876,18 @@ def apagar_projeto(projeto_id):
     projeto = Projeto.query.get_or_404(projeto_id)
     nome_projeto = projeto.nome
 
+    # 1. APAGA TODOS OS ALERTAS DESTE PROJETO PRIMEIRO
+    Alerta.query.filter_by(projeto_id=projeto.id).delete()
+
+    # 2. Apaga históricos de todos os caminhos associados
     caminhos_associados = Caminho.query.filter_by(projeto_id=projeto.id).all()
     for caminho in caminhos_associados:
         Historico.query.filter_by(caminho_id=caminho.id).delete()
 
+    # 3. Apaga os caminhos
     Caminho.query.filter_by(projeto_id=projeto.id).delete()
+    
+    # 4. Finalmente apaga o projeto
     db.session.delete(projeto)
     db.session.commit()
 
@@ -847,13 +896,12 @@ def apagar_projeto(projeto_id):
     registar_log(
         user_id=user_id,
         acao="APAGAR_PROJETO",
-        detalhes=f"Apagou o projeto '{nome_projeto}' e respetivos caminhos."
+        detalhes=f"Apagou o projeto '{nome_projeto}' e respetivos caminhos/alertas."
     )
 
     return jsonify({
         "mensagem": f"O projeto '{projeto.nome}' e todos os seus registos foram apagados com sucesso!"
     }), 200
-
 
 #rota para editar um proj
 @app.route('/projetos/<int:id>', methods=['PUT'])
@@ -893,17 +941,20 @@ def apagar_caminho(caminho_id):
     #procura o caminho pelo ID
     caminho = Caminho.query.get_or_404(caminho_id)
 
-    #apaga o historico associado a pasta
+    # 1. APAGA OS ALERTAS ASSOCIADOS A ESTE CAMINHO PRIMEIRO
+    Alerta.query.filter_by(caminho_id=caminho.id).delete()
+
+    # 2. apaga o historico associado a pasta
     Historico.query.filter_by(caminho_id=caminho.id).delete()
 
-    #apaga o caminho
+    # 3. apaga o caminho
     db.session.delete(caminho)
 
     #grava na bd
     db.session.commit()
 
     return jsonify({
-        "mensagem": f"O caminho '{caminho.localizacao}' e o seu histórico foram apagados com sucesso!"
+        "mensagem": f"O caminho '{caminho.localizacao}', alertas e histórico foram apagados com sucesso!"
     }), 200
 
 

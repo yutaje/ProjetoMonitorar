@@ -31,14 +31,11 @@
                     <li class="nav-item"><a class="nav-link text-nowrap" href="pesquisa_avancada.html">🔍 Pesquisa Avançada</a></li>
                 </ul>
 
-                <!-- PESQUISA GLOBAL HÍBRIDA (LIVE + MODAL) -->
                 <form class="d-flex me-3 position-relative" id="formPesquisaGlobal" style="min-width: 250px;">
                     <div class="input-group">
-                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto..." autocomplete="off">
+                        <input class="form-control" type="search" id="inputPesquisa" placeholder="Procurar projeto ou subpasta..." autocomplete="off">
                         <button class="btn btn-light border" type="submit" id="btnPesquisa" title="Pesquisar (Enter)">🔍</button>
                     </div>
-                    
-                    <!-- Caixa flutuante para os resultados em tempo real (Live) -->
                     <div id="dropdownResultados" class="dropdown-menu w-100 shadow-lg" style="display: none; position: absolute; top: 100%; left: 0; z-index: 1050; max-height: 400px; overflow-y: auto;">
                     </div>
                 </form>
@@ -67,7 +64,6 @@
         <div id="lista-projetos-container" class="row g-4"></div>
     </div>
 
-    <!-- Modal Criar Projeto -->
     <div class="modal fade" id="modalCriarProjeto" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -90,7 +86,6 @@
         </div>
     </div>
 
-    <!-- MODAL DE ESTATÍSTICAS E ÁRVORE DE FICHEIROS -->
     <div class="modal fade" id="modalEstatisticasFicheiros" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
@@ -108,7 +103,6 @@
         </div>
     </div>
 
-    <!-- Modal de Resultados da Pesquisa Completa -->
     <div class="modal fade" id="modalResultadosPesquisa" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
@@ -118,7 +112,6 @@
                 </div>
                 <div class="modal-body p-0">
                     <div id="lista-resultados-pesquisa" class="list-group list-group-flush">
-                        <!-- Os resultados completos vão aparecer aqui -->
                     </div>
                 </div>
             </div>
@@ -133,7 +126,6 @@
             window.location.href = "login.html";
         }
 
-        // Mostra o user na navbar
         const nomeUtilizador = localStorage.getItem('username');
         if (nomeUtilizador) {
             const tituloNavbar = document.getElementById('titulo-navbar');
@@ -170,24 +162,27 @@
             }
         }
 
+        // Função corrigida para aceitar tanto caminhos locais como de rede sem bloqueios
         function abrirPastaDoBotao(botao) {
             let caminho = botao.getAttribute('data-caminho');
-            if (!caminho) {
-                console.error("Caminho vazio!");
-                return;
-            }
+            if (!caminho) return;
+            
             caminho = caminho.replace(/\\/g, '/');
-            const caminhoCodificado = encodeURI(caminho);
-            const url = `monitorapp://${caminhoCodificado}`;
-            console.log("A abrir pasta via protocolo customizado:", url);
-            window.location.href = url;
+            const url = `monitorapp://${encodeURI(caminho)}`;
+            
+            let iframe = document.getElementById('hidden-protocol-frame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'hidden-protocol-frame';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            iframe.src = url;
         }
 
-        // Função recursiva em JavaScript para desenhar a árvore de pastas e extensões
         function renderizarNoArvore(no) {
             if (!no) return '';
 
-            // Desenhar badges de extensões desta pasta específica
             let extsHtml = '';
             if (no.extensoes && Object.keys(no.extensoes).length > 0) {
                 let chaves = Object.keys(no.extensoes);
@@ -199,7 +194,6 @@
                 extsHtml = `<span class="text-muted small">Sem ficheiros diretos nesta pasta.</span>`;
             }
 
-            // Processar subpastas recursivamente
             let subpastasHtml = '';
             if (no.subpastas && no.subpastas.length > 0) {
                 no.subpastas.forEach(sub => {
@@ -225,7 +219,6 @@
             `;
         }
 
-        // Função para abrir o modal de árvore de ficheiros de um projeto
         async function abrirEstatisticasProjeto(projetoId, nomeProjeto) {
             const modalEl = document.getElementById('modalEstatisticasFicheiros');
             const corpoModal = document.getElementById('corpoModalStats');
@@ -255,7 +248,7 @@
                 let htmlConteudo = '';
                 
                 projEncontrado.caminhos.forEach((caminho, index) => {
-                    const arvoreDados = caminho.extensoes; // Contém o objeto hierárquico construído no backend
+                    const arvoreDados = caminho.extensoes; 
                     
                     htmlConteudo += `
                         <div class="mb-4">
@@ -407,6 +400,7 @@
             }
         }
 
+        // Função de apagar o caminho com a apresentação correta do erro da base de dados/servidor
         async function apagarCaminho(caminhoId) {
             if (!confirm("Tens a certeza que pretendes remover este caminho?")) return;
             try {
@@ -414,9 +408,14 @@
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                
+                const dados = await res.json();
+                
                 if (res.ok) {
-                    mostrarMsg("Caminho removido com sucesso!", "success");
+                    mostrarMsg(dados.mensagem || "Caminho removido com sucesso!", "success");
                     carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao apagar caminho. Apenas admins podem realizar esta ação.", "danger");
                 }
             } catch (e) {
                 mostrarMsg("Erro de ligação ao servidor.", "danger");
@@ -434,6 +433,8 @@
                 if (res.ok) {
                     mostrarMsg(dados.mensagem || "Projeto apagado com sucesso!", "success");
                     carregarProjetos();
+                } else {
+                    mostrarMsg(dados.erro || dados.error || "Erro ao apagar projeto.", "danger");
                 }
             } catch (e) {
                 mostrarMsg("Erro de ligação ao servidor.", "danger");
@@ -442,9 +443,6 @@
 
         carregarProjetos();
 
-        // ==========================================
-        // LÓGICA DE PESQUISA (LIVE SEARCH + MODAL)
-        // ==========================================
         window.copiarCaminhoModal = async function(caminho, btn) {
             try {
                 await navigator.clipboard.writeText(caminho);
@@ -491,13 +489,13 @@
                             dropdownResultados.innerHTML = `<span class="dropdown-item text-muted">Nenhum resultado para "${data.termo}".</span>`;
                         } else {
                             data.resultados.forEach(proj => {
-                                let item = `
-                                    <a class="dropdown-item border-bottom py-2" href="monitorapp://${proj.caminho}">
+                                const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
+                                dropdownResultados.innerHTML += `
+                                    <div class="dropdown-item border-bottom py-2" style="cursor: pointer;" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                         <div class="fw-bold text-primary">${proj.nome}</div>
                                         <small class="text-muted text-wrap" style="font-size: 0.75rem;">${proj.caminho}</small>
-                                    </a>
+                                    </div>
                                 `;
-                                dropdownResultados.innerHTML += item;
                             });
                         }
                         dropdownResultados.style.display = 'block'; 
@@ -532,6 +530,7 @@
                     } else {
                         data.resultados.forEach(proj => {
                             const caminhoEscapado = proj.caminho.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            const dataCaminho = proj.caminho.replace(/\\/g, '\\\\').replace(/"/g, '&quot;');
                             
                             listaModal.innerHTML += `
                                 <div class="list-group-item p-3">
@@ -544,9 +543,9 @@
                                             <button type="button" class="btn btn-outline-secondary text-nowrap fw-bold" onclick="copiarCaminhoModal('${caminhoEscapado}', this)">
                                                 📋 Copiar
                                             </button>
-                                            <a class="btn btn-outline-info text-nowrap fw-bold" href="monitorapp://${proj.caminho}">
+                                            <button type="button" class="btn btn-outline-info text-nowrap fw-bold" onclick="abrirPastaDoBotao(this)" data-caminho="${dataCaminho}">
                                                 📂 Abrir
-                                            </a>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
