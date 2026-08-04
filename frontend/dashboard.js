@@ -2,7 +2,7 @@ const token = localStorage.getItem('meu_token_jwt') || localStorage.getItem('tok
 
 if (!token) {
     alert("Acesso negado! Tens de fazer login primeiro.");
-    window.location.href = "login.html";
+    window.location.href = "index.html";
 }
 
 // ==========================================
@@ -12,7 +12,7 @@ const btnLogout = document.getElementById('btn-logout');
 if (btnLogout) {
     btnLogout.addEventListener('click', function() {
         localStorage.clear();
-        window.location.href = "login.html";
+        window.location.href = "index.html";
     });
 }
 

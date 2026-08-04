@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Monitor de Projetos</title>
+    <title>Setup - Monitor de Projetos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
@@ -14,7 +14,7 @@
 <body>
 
     <div class="card">
-        <h3 class="text-center mb-4">🔐 Entrar no Sistema</h3>
+        <h3 class="text-center mb-4">🛠️ Criar Administrador</h3>
 
         <div id="erro-msg" style="color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: center; font-weight: bold; display: none;"></div>
 
@@ -31,7 +31,11 @@
             </div>
         </div>
 
-        <button type="button" id="btn-entrar" class="btn btn-primary w-100 py-2 fw-bold mt-2" onclick="fazerLogin()">Entrar</button>
+        <button type="button" id="btn-registar" class="btn btn-success w-100 py-2 fw-bold mt-2" onclick="fazerRegisto()">Criar Conta</button>
+        
+        <div class="text-center mt-3">
+            <a href="login.html" class="text-decoration-none" style="font-size: 0.9em; color: #6c757d;">Voltar ao Login</a>
+        </div>
     </div>
 
     <script>
@@ -54,20 +58,21 @@
             }
         }
 
-        async function fazerLogin() {
+        async function fazerRegisto() {
             const usernameInput = document.getElementById('username').value.trim();
             const passwordInput = document.getElementById('password').value.trim();
-            const btnEntrar = document.getElementById('btn-entrar');
+            const btnRegistar = document.getElementById('btn-registar');
             const caixaErro = document.getElementById('erro-msg');
 
             caixaErro.style.display = 'none';
             caixaErro.textContent = '';
 
-            btnEntrar.disabled = true;
-            btnEntrar.textContent = "A entrar...";
+            btnRegistar.disabled = true;
+            btnRegistar.textContent = "A registar...";
 
             try {
-                const res = await fetch(`${API_URL}/api/login`, {
+                // AQUI FOI ALTERADO PARA REGISTER
+                const res = await fetch(`${API_URL}/api/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: usernameInput, password: passwordInput })
@@ -76,12 +81,10 @@
                 const dados = await res.json();
 
                 if (res.ok) {
-                    localStorage.setItem('meu_token_jwt', dados.access_token);
-                    localStorage.setItem('user_role', dados.role);
-                    localStorage.setItem('username', usernameInput);
-                    window.location.href = "dashboard.html";
+                    alert("✅ Administrador criado com sucesso! Podes fazer login.");
+                    window.location.href = "login.html";
                 } else {
-                    const mensagem = dados.error || dados.erro || "Credenciais inválidas!";
+                    const mensagem = dados.error || dados.erro || "Erro ao criar conta!";
                     caixaErro.textContent = "⚠️ " + mensagem;
                     caixaErro.style.display = 'block';
                 }
@@ -89,14 +92,14 @@
                 caixaErro.textContent = "⚠️ Erro de ligação ao servidor Flask.";
                 caixaErro.style.display = 'block';
             } finally {
-                btnEntrar.disabled = false;
-                btnEntrar.textContent = "Entrar";
+                btnRegistar.disabled = false;
+                btnRegistar.textContent = "Criar Conta";
             }
         }
 
         document.addEventListener("keydown", function(event) {
             if (event.key === "Enter") {
-                fazerLogin();
+                fazerRegisto();
             }
         });
     </script>

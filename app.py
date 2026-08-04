@@ -58,8 +58,7 @@ def admin_required(fn):
     return decorator
 
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/teste_monitor'
-
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
 #desligar avisos flask
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -1611,28 +1610,24 @@ scheduler.add_job(func=gerar_scan_automatico, trigger="interval", hours=2)
 #rota do registo
 @app.route('/api/register', methods=['POST'])
 def register():
+    if User.query.count() > 0:
+        return jsonify({"error": "Acesso negado! O sistema já tem um administrador. Usa o painel de Admin para criar novas contas."}), 403
+
     dados = request.get_json()
     username = dados.get('username')
     password = dados.get('password')
-    role = dados.get('role', 'user')
 
     if not username or not password:
         return jsonify({"error": "Preenche o username e a password"}), 400
 
-    #verifica se o user ja existe
-    utilizador_existente = User.query.filter_by(username=username).first()
-    if utilizador_existente:
-        return jsonify({"error": "Esse username já existe!"}), 400
-
-    #encripta a password antes de guardar
     password_criptografada = generate_password_hash(password)
 
-    novo_utilizador = User(username=username, password=password_criptografada, role=role)
+    novo_utilizador = User(username=username, password=password_criptografada, role='admin')
 
     db.session.add(novo_utilizador)
     db.session.commit()
 
-    return jsonify({"message": "Utilizador registado com sucesso!"}), 201
+    return jsonify({"message": "Primeiro Administrador (Super Admin) registado com sucesso!"}), 201
      
 
 #rota login
@@ -1752,6 +1747,6 @@ def obter_sistema():
 
 #ligar 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
  
