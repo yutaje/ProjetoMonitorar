@@ -8,7 +8,7 @@ if (!token || role !== 'admin') {
 
 async function carregarDadosAdmin() {
     try {
-        const resProjetos = await fetch('http://127.0.0.1:5000/projetos', {
+        const resProjetos = await fetch(`${API_URL}/projetos`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resProjetos.ok) {
@@ -16,7 +16,7 @@ async function carregarDadosAdmin() {
             document.getElementById('metric-projetos').textContent = projetos.length;
         }
 
-        const resAlertas = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+        const resAlertas = await fetch(`${API_URL}/api/alertas/pendentes`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resAlertas.ok) {
@@ -24,7 +24,7 @@ async function carregarDadosAdmin() {
             document.getElementById('metric-alertas').textContent = dadosAlertas.total_pendentes;
         }
 
-        const resSistema = await fetch('http://127.0.0.1:5000/api/system', {
+        const resSistema = await fetch(`${API_URL}/api/system`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resSistema.ok) {

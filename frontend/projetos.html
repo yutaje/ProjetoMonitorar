@@ -11,6 +11,7 @@
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         .tree-node { border-left: 2px solid #dee2e6; margin-left: 10px; padding-left: 15px; margin-top: 8px; }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -279,7 +280,7 @@
                 let caminhosParaMostrar = [];
 
                 try {
-                    const res = await fetch(`http://127.0.0.1:5000/api/projetos/pesquisa?termo=${encodeURIComponent(nomeProjeto)}&modo=historico`, {
+                    const res = await fetch(`${API_URL}/api/projetos/pesquisa?termo=${encodeURIComponent(nomeProjeto)}&modo=historico`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (res.ok) {
@@ -294,7 +295,7 @@
                 }
 
                 if (caminhosParaMostrar.length === 0) {
-                    const resCaminhos = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}/caminhos`, {
+                    const resCaminhos = await fetch(`${API_URL}/${projetoId}/caminhos`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (resCaminhos.ok) {
@@ -360,7 +361,7 @@
 
         async function carregarProjetos() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/projetos', {
+                const res = await fetch(`${API_URL}/projetos`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -376,7 +377,7 @@
                 }
 
                 for (let p of projetos) {
-                    const resCaminhos = await fetch(`http://127.0.0.1:5000/projetos/${p.id}/caminhos`, {
+                    const resCaminhos = await fetch(`${API_URL}/projetos/${p.id}/caminhos`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
 
@@ -440,7 +441,7 @@
 
         async function carregarPcsParaSelect() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/computadores', {
+                const res = await fetch(`${API_URL}/api/computadores`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) return;
@@ -497,7 +498,7 @@
             }
 
             try {
-                const res = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}/caminhos`, {
+                const res = await fetch(`${API_URL}/projetos/${projetoId}/caminhos`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ localizacao: localizacaoFinal })
@@ -521,7 +522,7 @@
             if (!nomeProjeto) return;
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/projetos', {
+                const res = await fetch(`${API_URL}/projetos`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ nome: nomeProjeto })
@@ -545,7 +546,7 @@
         async function apagarCaminho(caminhoId) {
             if (!confirm("Tens a certeza que pretendes remover este caminho?")) return;
             try {
-                const res = await fetch(`http://127.0.0.1:5000/caminhos/${caminhoId}`, {
+                const res = await fetch(`${API_URL}/caminhos/${caminhoId}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -566,7 +567,7 @@
         async function apagarProjeto(projetoId, nomeProjeto) {
             if (!confirm(`Tens a certeza que pretendes apagar o projeto "${nomeProjeto}" e todos os seus caminhos?`)) return;
             try {
-                const res = await fetch(`http://127.0.0.1:5000/projetos/${projetoId}`, {
+                const res = await fetch(`${API_URL}/projetos/${projetoId}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -620,7 +621,7 @@
 
                 clearTimeout(timeoutPesquisa);
                 timeoutPesquisa = setTimeout(() => {
-                    fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                    fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     })
                     .then(res => res.json())
@@ -658,7 +659,7 @@
 
                 dropdownResultados.style.display = 'none';
 
-                fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
                 .then(res => res.json())
@@ -703,7 +704,7 @@
         // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
         async function resolverAlertaDoSino(idAlerta) {
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                const res = await fetch(`${API_URL}/api/alertas/${idAlerta}/resolver`, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -719,7 +720,7 @@
 
         async function atualizarSinoNotificacoes() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                const res = await fetch(`${API_URL}/api/alertas/pendentes`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 

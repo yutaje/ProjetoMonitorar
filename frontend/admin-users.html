@@ -9,6 +9,7 @@
         body { background-color: #f4f7f6; }
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -102,7 +103,7 @@
 
         async function carregarUtilizadores() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/users', {
+                const res = await fetch('${API_URL}/users', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -149,7 +150,7 @@
             msg.classList.add('d-none');
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/users', {
+                const res = await fetch('${API_URL}/api/users', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -180,7 +181,7 @@
             msg.classList.add('d-none');
 
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/users/${userId}/role`, {
+                const res = await fetch(`${API_URL}/api/users/${userId}/role`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -210,7 +211,7 @@
             msg.classList.add('d-none');
 
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/users/${userId}`, {
+                const res = await fetch(`${API_URL}/api/users/${userId}`, {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Bearer ${token}`

@@ -11,6 +11,7 @@
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-responsive { max-height: 500px; overflow-y: auto; }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -246,7 +247,7 @@
         // Carregar projetos dinamicamente para as checkboxes da nova secção
         async function carregarProjetosParaCheckboxes() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/projetos', {
+                const res = await fetch(`${API_URL}/projetos`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) return;
@@ -480,7 +481,7 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> A pesquisar...';
             btn.disabled = true;
 
-            fetch('http://127.0.0.1:5000/api/pesquisa-lote', {
+            fetch(`${API_URL}/api/pesquisa-lote`, {
                 method: 'POST',
                 headers: { 
                     'Authorization': `Bearer ${token}`,
@@ -530,7 +531,7 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> A pesquisar...';
             btn.disabled = true;
 
-            fetch('http://127.0.0.1:5000/api/pesquisa-lote', {
+            fetch(`${API_URL}/api/pesquisa-lote`, {
                 method: 'POST',
                 headers: { 
                     'Authorization': `Bearer ${token}`,
@@ -568,7 +569,7 @@
                 }
                 clearTimeout(timeoutPesquisa);
                 timeoutPesquisa = setTimeout(() => {
-                    fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                    fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }).then(res => res.json()).then(data => {
                         dropdownResultados.innerHTML = ''; 
@@ -599,7 +600,7 @@
                 if (termo === "") return;
                 dropdownResultados.style.display = 'none';
 
-                fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }).then(res => res.json()).then(data => {
                     const listaModal = document.getElementById('lista-resultados-pesquisa');
@@ -631,7 +632,7 @@
         // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
         async function resolverAlertaDoSino(idAlerta) {
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                const res = await fetch(`${API_URL}/api/alertas/${idAlerta}/resolver`, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -647,7 +648,7 @@
 
         async function atualizarSinoNotificacoes() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                const res = await fetch(`${API_URL}/api/alertas/pendentes`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 

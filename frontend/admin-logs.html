@@ -11,6 +11,7 @@
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
     </style>
 </head>
+<script src="config.js"></script>
 <body>
 
     <!-- Navbar de Administração -->
@@ -205,7 +206,7 @@
 
         async function carregarLogs() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/admin/logs', {
+                const res = await fetch('${API_URL}/api/admin/logs', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 

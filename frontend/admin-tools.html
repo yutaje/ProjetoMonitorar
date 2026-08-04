@@ -11,6 +11,7 @@
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); transition: transform 0.2s; }
         .card:hover { transform: translateY(-3px); }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -102,7 +103,7 @@
         // 1. Carregar as configurações atuais ao abrir a página
         async function carregarConfiguracoes() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/admin/config', {
+                const res = await fetch('${API_URL}/api/admin/config', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -130,7 +131,7 @@
             };
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/admin/config', {
+                const res = await fetch('${API_URL}/api/admin/config', {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -160,7 +161,7 @@
             btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A executar scan...`;
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/admin/forcar-scan', {
+                const res = await fetch('${API_URL}/api/admin/forcar-scan', {
                     method: 'POST', 
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -186,7 +187,7 @@
             btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> A gerar backup...`;
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/backups/gerar', {
+                const res = await fetch('${API_URL}/api/backups/gerar', {
                     method: 'POST', 
                     headers: { 'Authorization': `Bearer ${token}` }
                 });

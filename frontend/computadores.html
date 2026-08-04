@@ -10,6 +10,7 @@
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -180,7 +181,7 @@
         async function carregarPcsRede() {
             const tbody = document.getElementById('tabela-pcs-rede');
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/computadores', {
+                const res = await fetch(`${API_URL}/api/computadores`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) throw new Error("Erro ao carregar PCs");
@@ -225,7 +226,7 @@
             container.innerHTML = `<span class="spinner-border spinner-border-sm text-primary" role="status"></span> <small class="text-muted">A ler...</small>`;
 
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/computadores/${pcId}/espaco`, {
+                const res = await fetch(`${API_URL}/api/computadores/${pcId}/espaco`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const dados = await res.json();
@@ -271,7 +272,7 @@
             };
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/computadores', {
+                const res = await fetch(`${API_URL}/api/computadores`, {
                     method: 'POST',
                     headers: { 
                         'Authorization': `Bearer ${token}`,
@@ -314,7 +315,7 @@
             };
 
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/computadores/${id}`, {
+                const res = await fetch(`${API_URL}/api/computadores/${id}`, {
                     method: 'PUT',
                     headers: { 
                         'Authorization': `Bearer ${token}`,
@@ -339,7 +340,7 @@
         async function apagarPcRede(id) {
             if (!confirm("Tens a certeza que pretendes remover este PC do inventário?")) return;
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/computadores/${id}`, {
+                const res = await fetch(`${API_URL}/api/computadores/${id}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });

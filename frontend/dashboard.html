@@ -10,6 +10,7 @@
         .navbar { margin-bottom: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -183,7 +184,7 @@
 
         async function atualizarMetricasDashboard() {
             try {
-                const resProjetos = await fetch('http://127.0.0.1:5000/projetos', {
+                const resProjetos = await fetch(`${API_URL}/projetos`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (resProjetos.ok) {
@@ -191,7 +192,7 @@
                     document.getElementById('metric-projetos').textContent = projetos.length;
                 }
 
-                const resAlertas = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                const resAlertas = await fetch(`${API_URL}/api/alertas/pendentes`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (resAlertas.ok) {
@@ -199,7 +200,7 @@
                     document.getElementById('metric-alertas').textContent = dadosAlertas.total_pendentes !== undefined ? dadosAlertas.total_pendentes : 0;
                 }
 
-                const resSistema = await fetch('http://127.0.0.1:5000/api/system', {
+                const resSistema = await fetch(`${API_URL}/api/system`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (resSistema.ok) {
@@ -266,7 +267,7 @@
 
                 clearTimeout(timeoutPesquisa);
                 timeoutPesquisa = setTimeout(() => {
-                    fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                    fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     })
                     .then(res => res.json())
@@ -310,7 +311,7 @@
 
                 dropdownResultados.style.display = 'none';
 
-                fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
                 .then(res => res.json())
@@ -358,7 +359,7 @@
         // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
         async function resolverAlertaDoSino(idAlerta) {
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                const res = await fetch(`${API_URL}/api/alertas/${idAlerta}/resolver`, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -374,7 +375,7 @@
 
         async function atualizarSinoNotificacoes() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                const res = await fetch(`${API_URL}/api/alertas/pendentes`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 

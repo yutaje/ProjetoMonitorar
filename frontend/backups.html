@@ -12,6 +12,7 @@
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         .tree-node { border-left: 2px solid #dee2e6; margin-left: 10px; padding-left: 15px; margin-top: 8px; }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -200,7 +201,7 @@
             container.innerHTML = '<tr><td colspan="3" class="text-center p-4">A carregar backups e a verificar erros...</td></tr>';
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/backups', {
+                const res = await fetch(`${API_URL}/api/backups`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -257,7 +258,7 @@
                 let badgeErroHtml = `<span class="badge bg-success">✅ OK</span>`;
                 
                 try {
-                    const res = await fetch(`http://127.0.0.1:5000/api/backups/download/${nomeFicheiro}`, {
+                    const res = await fetch(`${API_URL}/api/backups/download/${nomeFicheiro}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (res.ok) {
@@ -388,7 +389,7 @@
             mostrarMsg(`A abrir ${nomeFicheiro}...`, 'info');
             
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/backups/download/${nomeFicheiro}`, {
+                const res = await fetch(`${API_URL}/api/backups/download/${nomeFicheiro}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -513,7 +514,7 @@
             mostrarMsg(`A iniciar download de ${nomeFicheiro}...`, 'info');
             
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/backups/download/${nomeFicheiro}`, {
+                const res = await fetch(`${API_URL}/api/backups/download/${nomeFicheiro}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -577,7 +578,7 @@
 
                 clearTimeout(timeoutPesquisa);
                 timeoutPesquisa = setTimeout(() => {
-                    fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                    fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     })
                     .then(res => res.json())
@@ -615,7 +616,7 @@
 
                 dropdownResultados.style.display = 'none';
 
-                fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+                fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
                 .then(res => res.json())
@@ -660,7 +661,7 @@
         // --- LÓGICA DO SINO DE NOTIFICAÇÕES (COM AÇÕES RÁPIDAS) ---
         async function resolverAlertaDoSino(idAlerta) {
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/alertas/${idAlerta}/resolver`, {
+                const res = await fetch(`${API_URL}/api/alertas/${idAlerta}/resolver`, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -676,7 +677,7 @@
 
         async function atualizarSinoNotificacoes() {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+                const res = await fetch(`${API_URL}/api/alertas/pendentes`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 

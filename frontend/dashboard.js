@@ -38,7 +38,7 @@ if (userRole) {
 // ==========================================
 async function atualizarMetricasDashboard() {
     try {
-        const resProjetos = await fetch('http://127.0.0.1:5000/projetos', {
+        const resProjetos = await fetch(`${API_URL}/projetos`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resProjetos.ok) {
@@ -46,7 +46,7 @@ async function atualizarMetricasDashboard() {
             document.getElementById('metric-projetos').textContent = projetos.length;
         }
 
-        const resAlertas = await fetch('http://127.0.0.1:5000/api/alertas/pendentes', {
+        const resAlertas = await fetch(`${API_URL}/api/alertas/pendentes`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resAlertas.ok) {
@@ -54,7 +54,7 @@ async function atualizarMetricasDashboard() {
             document.getElementById('metric-alertas').textContent = dadosAlertas.total_pendentes !== undefined ? dadosAlertas.total_pendentes : 0;
         }
 
-        const resSistema = await fetch('http://127.0.0.1:5000/api/system', {
+        const resSistema = await fetch(`${API_URL}/api/system`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (resSistema.ok) {
@@ -127,7 +127,7 @@ if (inputPesquisa && formPesquisa) {
 
         clearTimeout(timeoutPesquisa);
         timeoutPesquisa = setTimeout(() => {
-            fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+            fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             .then(res => res.json())
@@ -171,7 +171,7 @@ if (inputPesquisa && formPesquisa) {
 
         dropdownResultados.style.display = 'none';
 
-        fetch(`http://127.0.0.1:5000/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
+        fetch(`${API_URL}/api/pesquisa-global?q=${encodeURIComponent(termo)}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(res => res.json())

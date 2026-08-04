@@ -9,6 +9,7 @@
         body { background-color: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .card { border: none; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; background: white; padding: 30px; }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
 
@@ -66,7 +67,7 @@
             btnEntrar.textContent = "A entrar...";
 
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/login', {
+                const res = await fetch(`${API_URL}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username: usernameInput, password: passwordInput })
