@@ -231,7 +231,12 @@
                 const dados = await res.json();
 
                 if (res.ok && dados.sucesso) {
-                    let htmlDiscos = '';
+                    // --- CRIAMOS O BADGE COM A LATÊNCIA ---
+                    let htmlDiscos = `
+                        <div class="mb-2">
+                            <span class="badge bg-light text-dark border shadow-sm">⚡ Latência: <strong>${dados.latencia_ms} ms</strong></span>
+                        </div>
+                    `;
                     
                     dados.discos.forEach(disco => {
                         let corBarra = disco.percentagem > 85 ? 'bg-danger' : (disco.percentagem > 70 ? 'bg-warning' : 'bg-success');

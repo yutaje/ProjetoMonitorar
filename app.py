@@ -17,6 +17,7 @@ import psutil
 import shutil
 import subprocess
 import string
+import re
 
 
 
@@ -371,6 +372,18 @@ def executar_scan_caminho(caminho_obj):
     return estado_atual, total_ficheiros
 
 
+def obter_latencia_pc(ip):
+    comando = ["ping", "-n", "1", "-w", "1000", ip]
+    resultado = subprocess.run(comando, capture_output=True, text=True, encoding="cp437", errors="ignore")
+    
+    if resultado.returncode == 0:
+        match = re.search(r"(?:tempo|time)[=<](\d+)\s*ms", resultado.stdout, re.IGNORECASE)
+        if match:
+            return int(match.group(1)) #da o numero em ms 
+            
+    return None 
+
+
 def obter_letra_livre():
     for letra in reversed(string.ascii_uppercase):
         if letra not in ['A', 'B', 'C', 'D']: 
@@ -478,6 +491,7 @@ def verificar_espaco_pc(pc_id):
             
             return jsonify({
                 "sucesso": True,
+                "latencia_ms": 0, 
                 "discos": [{
                     "letra": "C", "total_gb": total_gb, "livre_gb": livre_gb,
                     "usado_gb": usado_gb, "percentagem": percentagem
@@ -486,10 +500,17 @@ def verificar_espaco_pc(pc_id):
         except Exception as e:
             return jsonify({"sucesso": False, "erro": str(e)}), 500
 
+    latencia_ms = obter_latencia_pc(pc.ip)
+    
+    if latencia_ms is None:
+        return jsonify({
+            "sucesso": False, 
+            "erro": f"O computador '{pc.nome_pc}' ({pc.ip}) encontra-se offline ou inacessível."
+        }), 404
+
     if not pc.utilizador_rede or not pc.password_rede:
         return jsonify({"sucesso": False, "erro": "Faltam credenciais de rede para este PC."}), 400
 
-    
     letra_drive = obter_letra_livre()
     if not letra_drive:
          return jsonify({"sucesso": False, "erro": "O servidor ficou sem letras de unidade disponíveis."}), 500
@@ -497,12 +518,10 @@ def verificar_espaco_pc(pc_id):
     try:
         nome_partilha = cacar_partilha_remota(pc.ip, pc.utilizador_rede, pc.password_rede)
 
-        
         if not nome_partilha:
             return jsonify({"sucesso": False, "erro": f"Nenhuma pasta partilhada encontrada no IP {pc.ip}."}), 404
             
         caminho_rede = f"\\\\{pc.ip}\\{nome_partilha}"
-        
         
         comando_map = ["net", "use", letra_drive, caminho_rede, f"/user:{pc.utilizador_rede}", pc.password_rede]
         resultado_map = subprocess.run(comando_map, capture_output=True, text=True, shell=False)
@@ -510,18 +529,17 @@ def verificar_espaco_pc(pc_id):
         if resultado_map.returncode != 0:
             return jsonify({"sucesso": False, "erro": f"Erro a mapear partilha: {resultado_map.stderr}"}), 500
             
-        
         uso = shutil.disk_usage(f"{letra_drive}\\")
         total_gb = round(uso.total / (2**30), 2)
         livre_gb = round(uso.free / (2**30), 2)
         usado_gb = round(uso.used / (2**30), 2)
         percentagem = round((uso.used / uso.total) * 100, 1)
         
-        
         subprocess.run(["net", "use", letra_drive, "/delete", "/y"], capture_output=True, shell=False)
         
         return jsonify({
             "sucesso": True,
+            "latencia_ms": latencia_ms, 
             "discos": [{
                 "letra": "C", 
                 "total_gb": total_gb, 
