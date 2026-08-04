@@ -94,7 +94,6 @@ class ComputadorRede(db.Model):
             'nome_pc': self.nome_pc,
             'ip': self.ip,
             'utilizador_rede': self.utilizador_rede,
-            # Por segurança, podemos omitir a password no dicionário geral se não for estritamente necessário expô-la
         }    
 
 
@@ -157,7 +156,6 @@ class LogAtividade(db.Model):
     data_hora = db.Column(db.DateTime, default=db.func.now(), nullable=False)
 
     def to_dict(self):
-        # Podes fazer join com o User para devolver logo o username no JSON
         user = User.query.get(self.user_id)
         return {
             "id": self.id,
@@ -185,7 +183,6 @@ class Alerta(db.Model):
     estado_alerta = db.Column(db.String(50), default='Por resolver', nullable=False)
 
     def to_dict(self):
-        # Ir buscar o nome do projeto e o caminho à base de dados usando os IDs
         projeto = Projeto.query.get(self.projeto_id)
         caminho = Caminho.query.get(self.caminho_id)
         
@@ -242,7 +239,6 @@ def construir_arvore_pasta(caminho_dir):
     is_rede = caminho_dir.startswith('\\\\')
     
     try:
-        # Para pastas de rede, evitamos o os.path.exists estrito para prevenir bloqueios por timeout/latência
         if not is_rede and not os.path.exists(caminho_dir):
             raise FileNotFoundError("A pasta não foi encontrada.")
             
@@ -346,14 +342,11 @@ def executar_scan_caminho(caminho_obj):
         detalhes_msg = f"Erro desconhecido: {str(e)}"
         tipo_erro_alerta = "Erro desconhecido"
 
-    # <--- INÍCIO DA ATUALIZAÇÃO DA BASE DE DADOS (NOVO) --->
     if data_recente_encontrada:
-        # Só atualizamos se tivermos encontrado uma data mais recente do que a que já lá estava
         if caminho_obj.data_ultima_atividade is None or data_recente_encontrada > caminho_obj.data_ultima_atividade:
             caminho_obj.data_ultima_atividade = data_recente_encontrada
-    # <--- FIM DA ATUALIZAÇÃO DA BASE DE DADOS --->
 
-    # Guarda o histórico na base de dados
+    #guarda o historico na bd
     novo_historico = Historico(
         caminho_id=caminho_obj.id,
         estado=estado_atual,
@@ -379,11 +372,9 @@ def executar_scan_caminho(caminho_obj):
 
 
 def obter_letra_livre():
-    # Percorre o alfabeto de trás para a frente (Z até E)
     for letra in reversed(string.ascii_uppercase):
-        if letra not in ['A', 'B', 'C', 'D']: # Evita as drives normais do sistema
+        if letra not in ['A', 'B', 'C', 'D']: 
             letra_caminho = f"{letra}:\\"
-            # Se a letra não existir no PC no momento, devolve essa!
             if not os.path.exists(letra_caminho):
                 return f"{letra}:"
     return None
@@ -394,11 +385,10 @@ def cacar_partilha_remota(ip, utilizador, password):
     Entra no IPC$, faz o net view, e procura uma pasta partilhada válida,
     ignorando pastas restritas de projetos (como CMPORTO).
     """
-    # 1. Autenticar no IPC$
     comando_ipc = ["net", "use", f"\\\\{ip}\\IPC$", f"/user:{utilizador}", password]
     subprocess.run(comando_ipc, capture_output=True, text=True, shell=False)
 
-    # 2. Perguntar ao PC as partilhas dele
+    #pergunta ao pc as partilhas dele
     comando_view = ["net", "view", f"\\\\{ip}"]
     resultado_view = subprocess.run(comando_view, capture_output=True, text=True, shell=False)
 
@@ -406,10 +396,9 @@ def cacar_partilha_remota(ip, utilizador, password):
     linhas = resultado_view.stdout.splitlines()
     ler_dados = False
 
-    # Lista Negra: Pastas que sabemos que dão Erro 5 ou são de projeto
+    
     blacklist = ["cmporto", "admin", "backup", "prints", "fax"]
 
-    # 3. Ler o output e recolher as pastas válidas
     for linha in linhas:
         if linha.startswith("----"):
             ler_dados = True
@@ -422,29 +411,29 @@ def cacar_partilha_remota(ip, utilizador, password):
             partes = linha.split()
             nome_partilha = partes[0]
             
-            # Ignora se estiver na blacklist
+            
             if nome_partilha.lower() in blacklist:
                 continue
 
             tipo_partilha = partes[1].lower() if len(partes) > 1 else ""
             
-            # Se for explicitamente do tipo disco, pomos logo no topo da lista
+            
             if "disco" in tipo_partilha or "disk" in tipo_partilha:
                 partilhas_candidatas.insert(0, nome_partilha)
             else:
                 partilhas_candidatas.append(nome_partilha)
 
-    # 4. Fechar a ligação da receção
+    
     subprocess.run(["net", "use", f"\\\\{ip}\\IPC$", "/delete", "/y"], capture_output=True, shell=False)
 
-    # Devolve a primeira candidata válida que não seja restrita (ou None se não houver nenhuma)
+    
     return partilhas_candidatas[0] if partilhas_candidatas else None
 
 
-# Rota para descarregar o ficheiro .reg diretamente da raiz do projeto
+#descarregar .reg 
 @app.route('/api/download/reg', methods=['GET'])
 def download_reg_file():
-    # app.root_path é a diretoria principal do teu projeto (PROJETOMONITORAR)
+    
     return send_from_directory(
         directory=app.root_path, 
         path='monitorapp.reg', 
@@ -459,7 +448,6 @@ def download_backup(filename):
     pasta_backups = 'backups_diarios' 
     
     try:
-        # as_attachment=True força o browser a fazer o download em vez de tentar abrir o JSON no ecrã
         return send_from_directory(pasta_backups, filename, as_attachment=True)
     except FileNotFoundError:
         return {"sucesso": False, "erro": "Ficheiro não encontrado no servidor."}, 404
@@ -480,7 +468,6 @@ def verificar_espaco_pc(pc_id):
     if not pc.ip:
         return jsonify({"sucesso": False, "erro": "O IP do computador não está definido."}), 400
         
-    # --- CENÁRIO 1: É o PC Local ---
     if pc.ip == "127.0.0.1" or pc.ip.lower() == "localhost":
         try:
             uso = shutil.disk_usage("C:\\")
@@ -499,11 +486,10 @@ def verificar_espaco_pc(pc_id):
         except Exception as e:
             return jsonify({"sucesso": False, "erro": str(e)}), 500
 
-    # --- CENÁRIO 2: É um PC Remoto na Rede ---
     if not pc.utilizador_rede or not pc.password_rede:
         return jsonify({"sucesso": False, "erro": "Faltam credenciais de rede para este PC."}), 400
 
-    # Pede ao sistema uma letra que não esteja a ser usada
+    
     letra_drive = obter_letra_livre()
     if not letra_drive:
          return jsonify({"sucesso": False, "erro": "O servidor ficou sem letras de unidade disponíveis."}), 500
@@ -517,21 +503,21 @@ def verificar_espaco_pc(pc_id):
             
         caminho_rede = f"\\\\{pc.ip}\\{nome_partilha}"
         
-        # Mapeia a unidade dinâmica para a partilha encontrada
+        
         comando_map = ["net", "use", letra_drive, caminho_rede, f"/user:{pc.utilizador_rede}", pc.password_rede]
         resultado_map = subprocess.run(comando_map, capture_output=True, text=True, shell=False)
         
         if resultado_map.returncode != 0:
             return jsonify({"sucesso": False, "erro": f"Erro a mapear partilha: {resultado_map.stderr}"}), 500
             
-        # Extrai os dados do disco com base na letra dinâmica que calhou
+        
         uso = shutil.disk_usage(f"{letra_drive}\\")
         total_gb = round(uso.total / (2**30), 2)
         livre_gb = round(uso.free / (2**30), 2)
         usado_gb = round(uso.used / (2**30), 2)
         percentagem = round((uso.used / uso.total) * 100, 1)
         
-        # Limpa a ligação no fim
+        
         subprocess.run(["net", "use", letra_drive, "/delete", "/y"], capture_output=True, shell=False)
         
         return jsonify({
@@ -592,7 +578,7 @@ def pesquisa_projetos():
                             projeto_id=projeto.id,
                             caminho_id=caminho.id,
                             tipo_erro=f"Erro de acesso: {estado}",
-                            estado_alerta='Por resolver' # <-- ESTAVA AQUI O ERRO!
+                            estado_alerta='Por resolver' 
                         )
                         db.session.add(novo_alerta)
                         db.session.commit()
@@ -639,7 +625,7 @@ def pesquisa_projetos():
     }), 200
 
 
-# Rota para listar todos os PCs registados na rede
+#listar todos os pcs na rede
 @app.route('/api/computadores', methods=['GET'])
 @jwt_required()
 def listar_computadores_rede():
@@ -647,7 +633,7 @@ def listar_computadores_rede():
     return jsonify([pc.to_dict() for pc in computadores]), 200
 
 
-# Rota para registar um novo PC na rede
+#registar novo pc na rede
 @app.route('/api/computadores', methods=['POST'])
 @admin_required
 def criar_computador_rede():
@@ -670,7 +656,7 @@ def criar_computador_rede():
     db.session.add(novo_pc)
     db.session.commit()
 
-    # Registar log da ação
+    
     user_id = int(get_jwt_identity())
     registar_log(
         user_id=user_id,
@@ -701,7 +687,7 @@ def editar_computador(pc_id):
     return jsonify({"sucesso": True, "mensagem": "Computador atualizado com sucesso!"}), 200
 
 
-# Rota para apagar um PC do inventário
+#apagar um pc
 @app.route('/api/computadores/<int:id_pc>', methods=['DELETE'])
 @admin_required
 def apagar_computador_rede(id_pc):
@@ -794,7 +780,7 @@ def pesquisa_lote():
     linhas = dados.get('linhas', [])
     modo = dados.get('modo', 'contem')
     fonte = dados.get('fonte', 'bd')
-    projetos_ids = dados.get('projetos_ids', []) # <--- NOVO: Lista de IDs selecionados (ex: [1, 3])
+    projetos_ids = dados.get('projetos_ids', []) 
 
     if not linhas:
         return jsonify({"erro": "Nenhum termo fornecido para pesquisa."}), 400
@@ -802,7 +788,7 @@ def pesquisa_lote():
     encontrados = []
     nao_encontrados = []
 
-    # (Carregamento de backups mantêm-se igual...)
+    
     todos_os_backups = []
     try:
         if os.path.exists(PASTA_BACKUPS):
@@ -829,7 +815,7 @@ def pesquisa_lote():
                     proj_id = c.get('projeto_id')
                     proj_nome = projetos_bk.get(proj_id, 'Desconhecido')
 
-                    # Filtro opcional por projetos_ids vindos do frontend
+                    
                     if projetos_ids and proj_id not in projetos_ids:
                         continue
 
@@ -859,7 +845,6 @@ def pesquisa_lote():
             else:
                 nao_encontrados.append(termo)
     else:
-        # Pesquisa na Base de Dados com filtro opcional de projetos
         for linha in linhas:
             termo = linha.strip()
             if not termo:
@@ -869,7 +854,7 @@ def pesquisa_lote():
             
             query = db.session.query(Projeto, Caminho).join(Caminho, Caminho.projeto_id == Projeto.id)
             
-            # Se o utilizador selecionou projetos específicos, aplicamos o filtro .in_()
+            
             if projetos_ids:
                 query = query.filter(Caminho.projeto_id.in_(projetos_ids))
 
@@ -987,7 +972,7 @@ def listar_users():
     return jsonify(lista), 200
 
 
-# Rota para criar um novo utilizador diretamente pelo painel de admin
+#criar novo user pelo admin
 @app.route('/api/users', methods=['POST'])
 @admin_required
 def criar_utilizador_admin():
@@ -999,11 +984,11 @@ def criar_utilizador_admin():
     if not username or not password:
         return jsonify({"error": "O username e a password são obrigatórios!"}), 400
 
-    # Verifica se o utilizador já existe
+    #verificar se já existe
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Esse username já existe!"}), 400
 
-    # Encripta a password
+    #encripta a pass
     password_criptografada = generate_password_hash(password)
 
     novo_utilizador = User(
@@ -1015,7 +1000,6 @@ def criar_utilizador_admin():
     db.session.add(novo_utilizador)
     db.session.commit()
 
-    # Registar log da ação
     admin_id = get_jwt_identity()
     registar_log(
         user_id=admin_id,
@@ -1028,14 +1012,12 @@ def criar_utilizador_admin():
         "user": novo_utilizador.to_dict()
     }), 201
 
-
-# Rota para apagar um utilizador pelo ID
+#apagar user pelo id
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
 @admin_required
 def apagar_utilizador_admin(user_id):
     admin_id_atual = int(get_jwt_identity())
 
-    # Evitar que o admin apague a sua própria conta por engano
     if user_id == admin_id_atual:
         return jsonify({"error": "Não podes apagar a tua própria conta de administrador!"}), 400
 
@@ -1045,7 +1027,6 @@ def apagar_utilizador_admin(user_id):
     db.session.delete(user)
     db.session.commit()
 
-    # Registar log da ação
     registar_log(
         user_id=admin_id_atual,
         acao="APAGAR_UTILIZADOR",
@@ -1073,7 +1054,7 @@ def alterar_cargo_utilizador(user_id):
     user.role = nova_role
     db.session.commit()
     
-    # Registar a ação nos logs do sistema
+   
     admin_id = get_jwt_identity()
     registar_log(
         user_id=admin_id,
@@ -1132,22 +1113,20 @@ def apagar_projeto(projeto_id):
     projeto = Projeto.query.get_or_404(projeto_id)
     nome_projeto = projeto.nome
 
-    # 1. APAGA TODOS OS ALERTAS DESTE PROJETO PRIMEIRO
+    # apaga todos os alertas associados ao proj
     Alerta.query.filter_by(projeto_id=projeto.id).delete()
 
-    # 2. Apaga históricos de todos os caminhos associados
+    #apaga todos os historicos associados aos caminhos do proj
     caminhos_associados = Caminho.query.filter_by(projeto_id=projeto.id).all()
     for caminho in caminhos_associados:
         Historico.query.filter_by(caminho_id=caminho.id).delete()
 
-    # 3. Apaga os caminhos
+    
     Caminho.query.filter_by(projeto_id=projeto.id).delete()
     
-    # 4. Finalmente apaga o projeto
     db.session.delete(projeto)
     db.session.commit()
 
-    # Registar log da eliminação
     user_id = int(get_jwt_identity())
     registar_log(
         user_id=user_id,
@@ -1179,7 +1158,7 @@ def editar_projeto(id):
     projeto.nome = nome_limpo
     db.session.commit()
 
-    # Registar log da alteração do projeto
+    
     user_id = int(get_jwt_identity())
     registar_log(
         user_id=user_id,
@@ -1197,13 +1176,13 @@ def apagar_caminho(caminho_id):
     #procura o caminho pelo ID
     caminho = Caminho.query.get_or_404(caminho_id)
 
-    # 1. APAGA OS ALERTAS ASSOCIADOS A ESTE CAMINHO PRIMEIRO
+    
     Alerta.query.filter_by(caminho_id=caminho.id).delete()
 
-    # 2. apaga o historico associado a pasta
+    
     Historico.query.filter_by(caminho_id=caminho.id).delete()
 
-    # 3. apaga o caminho
+    
     db.session.delete(caminho)
 
     #grava na bd
@@ -1447,7 +1426,7 @@ def criar_backup_manual():
         caminhos = Caminho.query.all()
         projetos = Projeto.query.all()
 
-        # Enriquecer os caminhos com o último histórico (incluindo a árvore hierárquica)
+        
         caminhos_com_historico = []
         for c in caminhos:
             c_dict = c.to_dict()
@@ -1471,7 +1450,7 @@ def criar_backup_manual():
         with open(caminho_completo, 'w', encoding='utf-8') as f:
             json.dump(dados_para_guardar, f, ensure_ascii=False, indent=4)
 
-        # Registar log de backup manual
+        #regista log de backup manual
         user_id = int(get_jwt_identity())
         registar_log(
             user_id=user_id,
@@ -1499,7 +1478,7 @@ def forcar_scan():
     try:
         gerar_scan_automatico()
         
-        # Registar log de scan forçado
+        #regista log de scan manual
         user_id = int(get_jwt_identity())
         registar_log(
             user_id=user_id,
@@ -1574,7 +1553,6 @@ def gerar_scan_automatico():
                     )
                     db.session.add(novo_alerta)
                     
-            # O GATILHO DA INATIVIDADE
             elif caminho.data_ultima_atividade: 
                 config = ConfigSistema.query.filter_by(chave='dias_limite_inatividade').first()
                 dias_limite = int(config.valor) if config else 4
@@ -1672,7 +1650,6 @@ def login():
 @app.route('/api/protegida', methods=['GET'])
 @jwt_required()
 def rota_protegida():
-    # Descobre qual é o ID do utilizador que está a usar o token
     utilizador_id = get_jwt_identity()
     return jsonify({
         "message": "Acesso autorizado com sucesso!",
