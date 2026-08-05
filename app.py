@@ -972,7 +972,7 @@ def atualizar_configuracoes():
 
 
 #rota para listar todos os users
-@app.route('/users')
+@app.route('/api/users', methods=['GET'])
 @admin_required
 def listar_users():
     todos_users = User.query.all()

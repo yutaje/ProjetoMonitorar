@@ -34,7 +34,7 @@
         <button type="button" id="btn-registar" class="btn btn-success w-100 py-2 fw-bold mt-2" onclick="fazerRegisto()">Criar Conta</button>
         
         <div class="text-center mt-3">
-            <a href="login.html" class="text-decoration-none" style="font-size: 0.9em; color: #6c757d;">Voltar ao Login</a>
+            <a href="index.html" class="text-decoration-none" style="font-size: 0.9em; color: #6c757d;">Voltar ao Login</a>
         </div>
     </div>
 
@@ -82,7 +82,7 @@
 
                 if (res.ok) {
                     alert("✅ Administrador criado com sucesso! Podes fazer login.");
-                    window.location.href = "login.html";
+                    window.location.href = "index.html";
                 } else {
                     const mensagem = dados.error || dados.erro || "Erro ao criar conta!";
                     caixaErro.textContent = "⚠️ " + mensagem;

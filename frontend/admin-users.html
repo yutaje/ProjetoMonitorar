@@ -103,7 +103,7 @@
 
         async function carregarUtilizadores() {
             try {
-                const res = await fetch('${API_URL}/users', {
+                const res = await fetch(`${API_URL}/api/users`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -150,7 +150,7 @@
             msg.classList.add('d-none');
 
             try {
-                const res = await fetch('${API_URL}/api/users', {
+                const res = await fetch(`${API_URL}/api/users`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

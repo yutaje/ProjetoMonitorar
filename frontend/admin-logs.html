@@ -206,7 +206,7 @@
 
         async function carregarLogs() {
             try {
-                const res = await fetch('${API_URL}/api/admin/logs', {
+                const res = await fetch(`${API_URL}/api/admin/logs`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
